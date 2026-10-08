@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Инцидент-тренировка — воркшоп</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2330; --border: #30363d;
+    --text: #e6edf3; --dim: #8b949e;
+    --green: #2ea043; --yellow: #d29922; --red: #f85149;
+    --a: #39c5cf;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+  }
+  .screen { display: none; width: 100%; max-width: 1240px; padding: 2.2rem 2rem; }
+  .screen.on { display: block; }
+  h1 { font-size: 2.2rem; margin: 0 0 .4rem; }
+  h2 { font-size: 2.4rem; margin: 0 0 1rem; }
+  .dim { color: var(--dim); }
+  .btn {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.1rem 1.4rem; font-size: 1.5rem; cursor: pointer;
+    text-align: left; transition: border-color .15s, transform .05s;
+  }
+  .btn:hover { border-color: var(--a); }
+  .btn:active { transform: scale(.99); }
+  .btn .num { color: var(--dim); margin-right: .8rem; font-size: 1.1rem; }
+  .btn.primary { background: #1f6feb; border-color: #1f6feb; text-align: center; }
+  .btn.primary:hover { background: #388bfd; }
+  input {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; padding: .8rem 1rem; font-size: 1.3rem; width: 100%;
+  }
+  label { display: block; font-size: 1.1rem; margin-bottom: .4rem; color: var(--dim); }
+
+  /* Лобби */
+  #cases { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+  .case { border: 2px solid var(--border); border-radius: 14px; }
+  .case.sel { border-color: var(--a); }
+  .case h3 { margin: 0 0 .5rem; font-size: 1.5rem; }
+  .case p { margin: 0 0 .8rem; font-size: 1.15rem; color: var(--dim); }
+
+  /* Игровой экран */
+  .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .role-badge {
+    display: inline-block; margin-top: .6rem; padding: .45rem 1.1rem;
+    background: var(--panel2); border: 1px solid var(--a); border-radius: 999px;
+    font-size: 1.25rem; color: var(--a);
+  }
+  .stats { display: flex; gap: 1rem; align-items: stretch; }
+  .team {
+    border: 2px solid var(--border); border-radius: 14px; padding: .7rem 1.4rem;
+    min-width: 190px; text-align: center;
+  }
+  .team .name { font-size: 1.15rem; color: var(--dim); }
+  .team .val { font-size: 2.6rem; font-weight: 700; line-height: 1.1; color: var(--a); }
+  .traps {
+    border: 2px dashed var(--border); border-radius: 14px; padding: .7rem 1.2rem;
+    text-align: center; min-width: 130px;
+  }
+  .traps .name { font-size: 1.05rem; color: var(--dim); }
+  .traps .val { font-size: 2.2rem; font-weight: 700; line-height: 1.15; color: var(--red); }
+  .tension-wrap { margin: 1.4rem 0; }
+  .tension-label { display: flex; justify-content: space-between; font-size: 1.05rem; color: var(--dim); margin-bottom: .3rem; }
+  .tension-bar { height: 22px; background: var(--panel2); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+  #tensionFill { height: 100%; width: 50%; background: var(--yellow); transition: width .4s, background .4s; }
+
+  .game-main { display: grid; grid-template-columns: 1fr 340px; gap: 1.4rem; align-items: start; }
+  @media (max-width: 920px) { .game-main { grid-template-columns: 1fr; } }
+  .node-card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 1.6rem 1.8rem; margin: 0 0 1rem; }
+  .node-card .text { font-size: 1.5rem; line-height: 1.5; white-space: pre-wrap; }
+  #choices { display: flex; flex-direction: column; gap: .8rem; }
+  .presenter {
+    margin-top: 1.2rem; font-size: 1.02rem; color: var(--dim);
+    border-left: 3px solid var(--border); padding: .3rem 0 .3rem .9rem;
+  }
+  .presenter .say { font-style: italic; }
+  .presenter .say::before { content: "ведущему: "; font-style: normal; font-weight: 600; }
+  .presenter .rtask::before { content: "задача роли: "; font-weight: 600; }
+  .presenter .rtask { margin-top: .35rem; }
+
+  /* Диаграмма */
+  .diag-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 1rem; position: sticky; top: 1rem; }
+  .diag-title { font-size: 1.05rem; color: var(--dim); margin: 0 0 .5rem; }
+  svg.diag { width: 100%; height: auto; display: block; }
+  svg.diag.mini { max-height: 170px; }
+  .diag-box.c-red { fill: rgba(248,81,73,.16); stroke: var(--red); }
+  .diag-box.c-yellow { fill: rgba(210,153,34,.16); stroke: var(--yellow); }
+  .diag-box.c-green { fill: rgba(46,160,67,.16); stroke: var(--green); }
+  .diag-box.c-gray { fill: #21262d; stroke: var(--border); }
+  .diag-label { fill: var(--text); font-size: 12.5px; text-anchor: middle; }
+  .diag-note { fill: var(--dim); font-size: 10.5px; text-anchor: middle; }
+  .diag-edge { stroke: var(--dim); stroke-width: 1.5; }
+  .diag-elabel { fill: var(--dim); font-size: 10.5px; text-anchor: middle; }
+
+  /* Последствия и финал */
+  .big { font-size: 1.7rem; line-height: 1.5; }
+  .gain { font-size: 2.2rem; font-weight: 700; margin: 1rem 0; }
+  .metrics { font-size: 1.9rem; font-weight: 700; margin: 1.2rem 0; }
+  .metrics .t { color: var(--dim); font-weight: 400; }
+  .center { text-align: center; }
+  .kbd-hint { margin-top: 2rem; font-size: 1rem; color: var(--dim); }
+</style>
+</head>
+<body>
+
+<div id="lobby" class="screen on">
+  <h1>Инцидент-тренировка</h1>
+  <p class="dim">Одна команда, пять ролей. Зал обсуждает — шаг ведёт назначенная роль. Ведущий жмёт кнопки.</p>
+  <div id="cases"></div>
+  <div style="max-width:420px;margin-bottom:1.5rem">
+    <label for="teamName">Команда</label>
+    <input id="teamName" value="Команда зала">
+  </div>
+  <button id="startBtn" class="btn primary" style="width:100%;max-width:420px">Старт</button>
+</div>
+
+<div id="game" class="screen">
+  <div class="topbar">
+    <div>
+      <div class="dim" id="caseTitle"></div>
+      <h2 id="nodeTitle"></h2>
+      <div class="role-badge">Шаг: <b id="roleName"></b></div>
+    </div>
+    <div class="stats">
+      <div class="team"><div class="name" id="teamLabel"></div><div class="val" id="scoreVal">0</div></div>
+      <div class="traps"><div class="name">Ловушки</div><div class="val" id="trapVal">0</div></div>
+    </div>
+  </div>
+  <div class="tension-wrap">
+    <div class="tension-label"><span>Напряжение инцидента</span><span id="tensionVal">50</span></div>
+    <div class="tension-bar"><div id="tensionFill"></div></div>
+  </div>
+  <div class="game-main">
+    <div>
+      <div class="node-card"><div class="text" id="nodeText"></div></div>
+      <div id="choices"></div>
+      <div class="presenter">
+        <div class="say" id="sayBox"></div>
+        <div class="rtask" id="rtaskBox"></div>
+      </div>
+    </div>
+    <div class="diag-panel">
+      <div class="diag-title">Архитектура</div>
+      <div id="diagramBox"></div>
+    </div>
+  </div>
+  <div class="kbd-hint">Клавиши: 1–4 — выбор · R — в лобби</div>
+</div>
+
+<div id="outcome" class="screen">
+  <h2>Что случилось</h2>
+  <div class="node-card"><div class="text big" id="outcomeText"></div></div>
+  <div class="gain center" id="gainLine"></div>
+  <div class="presenter" style="max-width:720px"><div class="say" id="hintBox"></div></div>
+  <button id="nextBtn" class="btn primary" style="width:100%;max-width:420px">Дальше</button>
+  <div class="kbd-hint">Enter / → — дальше</div>
+</div>
+
+<div id="final" class="screen center">
+  <h2 id="endTitle"></h2>
+  <div class="node-card" style="text-align:left;max-width:860px;margin:0 auto 1rem"><div class="text big" id="endText"></div></div>
+  <div class="metrics" id="metrics"></div>
+  <button id="againBtn" class="btn primary" style="width:100%;max-width:420px">Заново</button>
+  <div class="kbd-hint">R — в лобби</div>
+</div>
+
+<script src="hall-engine.js"></script>
+<script>
+  window.HALL_SCENARIOS = [];
+  window.HALL_SCENARIO = function (o) { window.HALL_SCENARIOS.push(o); };
+</script>
+<script src="scenarios/hall-phantom-network.js"></script>
+<script src="scenarios/hall-expired-cert.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var SCREENS = ['lobby', 'game', 'outcome', 'final'];
+  var NS = 'http://www.w3.org/2000/svg';
+  var scn = null, state = null, pending = null;
+
+  function $(id) { return document.getElementById(id); }
+  function show(name) {
+    SCREENS.forEach(function (s) { $(s).classList.toggle('on', s === name); });
+  }
+
+  /* SVG */
+  function el(name, attrs) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  function renderDiagram(pack, mini) {
+    var svg = el('svg', { viewBox: '0 0 640 320', 'class': 'diag' + (mini ? ' mini' : '') });
+    var defs = el('defs', {});
+    var marker = el('marker', { id: 'arr', markerWidth: '8', markerHeight: '8', refX: '7', refY: '4', orient: 'auto' });
+    marker.appendChild(el('path', { d: 'M0,0 L8,4 L0,8 z', fill: '#8b949e' }));
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    var H = 48, DW = 150, boxes = {};
+    pack.diagram.nodes.forEach(function (d) { boxes[d.id] = { x: d.x, y: d.y, w: d.w || DW, h: H }; });
+
+    (pack.diagram.edges || []).forEach(function (e) {
+      var a = boxes[e.from], b = boxes[e.to];
+      if (!a || !b) return;
+      var x1 = a.x + a.w / 2, y1 = a.y + a.h / 2, x2 = b.x + b.w / 2, y2 = b.y + b.h / 2;
+      svg.appendChild(el('line', { x1: x1, y1: y1, x2: x2, y2: y2, 'class': 'diag-edge', 'marker-end': 'url(#arr)' }));
+      if (e.label) {
+        var t = el('text', { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 6, 'class': 'diag-elabel' });
+        t.textContent = e.label;
+        svg.appendChild(t);
+      }
+    });
+
+    pack.diagram.nodes.forEach(function (d) {
+      var b = boxes[d.id];
+      svg.appendChild(el('rect', { x: b.x, y: b.y, width: b.w, height: b.h, rx: 10, 'class': 'diag-box c-' + (d.color || 'gray') }));
+      var t = el('text', { x: b.x + b.w / 2, y: b.y + (d.note ? 24 : 30), 'class': 'diag-label' });
+      t.textContent = d.label;
+      svg.appendChild(t);
+      if (d.note) {
+        var n = el('text', { x: b.x + b.w / 2, y: b.y + 40, 'class': 'diag-note' });
+        n.textContent = d.note;
+        svg.appendChild(n);
+      }
+    });
+    return svg;
+  }
+
+  /* Лобби */
+  var selected = null;
+  function renderLobby() {
+    var box = $('cases');
+    box.innerHTML = '';
+    window.HALL_SCENARIOS.forEach(function (p) {
+      var b = document.createElement('button');
+      b.className = 'btn case' + (selected === p.id ? ' sel' : '');
+      var h = document.createElement('h3'); h.textContent = p.title;
+      var d = document.createElement('p'); d.textContent = p.brief;
+      b.appendChild(h); b.appendChild(d);
+      b.appendChild(renderDiagram(p, true));
+      b.onclick = function () { selected = p.id; renderLobby(); };
+      box.appendChild(b);
+    });
+    show('lobby');
+  }
+
+  $('startBtn').onclick = function () {
+    if (!selected) return;
+    scn = window.HALL_SCENARIOS.find(function (p) { return p.id === selected; });
+    var team = $('teamName').value.trim() || 'Команда зала';
+    state = window.HALL_ENGINE.createGame(scn, { team: team });
+    renderGame();
+  };
+
+  /* Игровой экран */
+  function tensionColor(v) { return v < 40 ? 'var(--green)' : (v <= 70 ? 'var(--yellow)' : 'var(--red)'); }
+
+  function trapsCount() {
+    return state.log.filter(function (l) { return l.trap; }).length;
+  }
+
+  function renderStats() {
+    $('teamLabel').textContent = state.team;
+    $('scoreVal').textContent = state.score;
+    $('trapVal').textContent = trapsCount();
+    $('tensionVal').textContent = state.tension;
+    var fill = $('tensionFill');
+    fill.style.width = state.tension + '%';
+    fill.style.background = tensionColor(state.tension);
+  }
+
+  function renderGame() {
+    var node = scn.nodes[state.nodeId];
+    $('caseTitle').textContent = scn.title;
+    $('nodeTitle').textContent = node.title;
+    $('roleName').textContent = scn.roles[node.role].name;
+    $('nodeText').textContent = node.text;
+    $('sayBox').textContent = node.say || '';
+    $('rtaskBox').textContent = node.roleTask || '';
+    var box = $('choices');
+    box.innerHTML = '';
+    node.choices.forEach(function (c, i) {
+      var b = document.createElement('button');
+      b.className = 'btn';
+      b.innerHTML = '<span class="num">' + (i + 1) + '</span>' + c.label;
+      b.onclick = function () { pick(c.id); };
+      box.appendChild(b);
+    });
+    var dg = $('diagramBox');
+    dg.innerHTML = '';
+    dg.appendChild(renderDiagram(scn, false));
+    renderStats();
+    show('game');
+  }
+
+  function pick(choiceId) {
+    var r = window.HALL_ENGINE.choose(state, choiceId);
+    state = r.state;
+    pending = r.result;
+    renderOutcome();
+  }
+
+  /* Последствия */
+  function renderOutcome() {
+    var c = pending.choice;
+    $('outcomeText').textContent = c.outcome;
+    var deltaTxt = c.tension > 0 ? '+' + c.tension : String(c.tension);
+    $('gainLine').textContent = (pending.gained > 0 ? '+' + pending.gained : pending.gained) +
+      ' очков · напряжение ' + deltaTxt;
+    $('gainLine').style.color = pending.gained > 0 ? 'var(--green)' : (pending.gained < 0 ? 'var(--red)' : 'var(--dim)');
+    $('hintBox').textContent = c.hint;
+    renderStats();
+    show('outcome');
+  }
+
+  $('nextBtn').onclick = function () {
+    if (state.status === 'ENDED') renderFinal();
+    else renderGame();
+  };
+
+  /* Финал */
+  function renderFinal() {
+    var node = scn.nodes[state.nodeId];
+    $('endTitle').textContent = node.title;
+    $('endText').textContent = node.text;
+    $('metrics').innerHTML = 'Очки: ' + state.score +
+      ' <span class="t">·</span> Ловушки: ' + trapsCount() +
+      ' <span class="t">·</span> Напряжение: ' + state.tension;
+    show('final');
+  }
+
+  $('againBtn').onclick = renderLobby;
+
+  /* Клавиши */
+  document.addEventListener('keydown', function (e) {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (e.key === 'r' || e.key === 'R' || e.key === 'к') { renderLobby(); return; }
+    if ($('game').classList.contains('on')) {
+      var n = parseInt(e.key, 10);
+      if (n >= 1 && n <= 4) {
+        var node = scn.nodes[state.nodeId];
+        if (node.choices[n - 1]) pick(node.choices[n - 1].id);
+      }
+    } else if ($('outcome').classList.contains('on')) {
+      if (e.key === 'Enter' || e.key === 'ArrowRight') $('nextBtn').click();
+    }
+  });
+
+  renderLobby();
+})();
+</script>
+</body>
+</html>
