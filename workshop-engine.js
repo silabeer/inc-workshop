@@ -14,6 +14,7 @@
   const PHASE_SEC = { situation: 30, discussion: 90, voting: 30 };
   const START_TENSION = 50;
   const HISTORY_MAX = 40;
+  const AUDIENCE_MAX = 1000; // голосов зала на шаг: защита от накрутки скриптом
 
   const str = v => typeof v === 'string' && v.trim() !== '';
   const num = v => typeof v === 'number' && isFinite(v);
@@ -145,15 +146,17 @@
       metrics: { tension: START_TENSION, money: 0, ttrMin: 0 },
       journal: [],
       seats,
+      audience: {},   // голоса зала на текущем шаге: {токен устройства: вариант}; на решение не влияют
+      sound: !!opts.sound,
       phaseAt: null, stepAt: null, startedAt: null, endedAt: null,
       history: [],
     };
   }
 
-  // Снимок для отката: всё, кроме истории и мест (освобождённая роль не должна «вернуться» по undo).
+  // Снимок для отката: всё, кроме истории, мест и настроек (освобождённая роль не должна «вернуться» по undo).
   function snapshot(state) {
     const s = JSON.parse(JSON.stringify(state));
-    delete s.history; delete s.seats;
+    delete s.history; delete s.seats; delete s.sound; delete s.audience; // голоса зала — сотни токенов, в снимках не нужны
     return s;
   }
   function withHistory(state, next) {
@@ -177,6 +180,19 @@
     return { counts, total, leaders, tie: leaders.length > 1, winner, decidedBy, allVoted: total === ROLE_IDS.length };
   }
 
+  // Голоса зала: подсказка для разбора («зал выбрал откат, роли — флаг»), на решение команды не влияют.
+  function tallyAudience(pack, state) {
+    const step = currentStep(pack, state);
+    const counts = {};
+    for (const o of step.options) counts[o.id] = 0;
+    const audience = state.audience || {};
+    for (const t of Object.keys(audience)) if (counts[audience[t]] !== undefined) counts[audience[t]]++;
+    const total = Object.keys(audience).length;
+    const top = total ? Math.max.apply(null, Object.values(counts)) : 0;
+    const leaders = total ? step.options.map(o => o.id).filter(id => counts[id] === top) : [];
+    return { counts, total, leader: leaders.length === 1 ? leaders[0] : null };
+  }
+
   /* Применяет команду. Бросает Error с понятным текстом (e.userError), состояние не трогает.
      Кто вправе подать команду (ведущий или роль), проверяет сервер. */
   function apply(pack, state, cmd, now) {
@@ -188,12 +204,28 @@
         if (!ROLE_IDS.includes(cmd.role)) fail('Нет такой роли');
         if (!str(cmd.token)) fail('Нет токена устройства');
         if (s.seats[cmd.role] && s.seats[cmd.role] !== cmd.token) fail('Роль уже занята');
+        // Одно устройство — одна роль: прежнее место этого телефона освобождается.
+        for (const r of ROLE_IDS) if (s.seats[r] === cmd.token) s.seats[r] = null;
         s.seats[cmd.role] = cmd.token;
         return s;
       }
       case 'release': {
         if (!ROLE_IDS.includes(cmd.role)) fail('Нет такой роли');
         s.seats[cmd.role] = null;
+        return s;
+      }
+      case 'shuffle': {
+        // Жребий: перестановку присылает сервер (случайность вне движка). perm[i] — чья роль достаётся роли ROLE_IDS[i].
+        if (s.phase !== 'lobby') fail('Перетасовать роли можно только в лобби');
+        const perm = cmd.perm;
+        if (!Array.isArray(perm) || perm.length !== ROLE_IDS.length || ROLE_IDS.some(r => !perm.includes(r))) fail('Неверная перестановка ролей');
+        const old = s.seats;
+        s.seats = {};
+        ROLE_IDS.forEach((r, i) => { s.seats[r] = old[perm[i]]; });
+        return s;
+      }
+      case 'sound': {
+        s.sound = !!cmd.on;
         return s;
       }
       case 'team': {
@@ -213,12 +245,12 @@
       }
       case 'voting': {
         if (s.phase !== 'situation' && s.phase !== 'discussion') fail('Голосование открывается после ситуации или обсуждения');
-        Object.assign(s, { phase: 'voting', phaseAt: now, votes: {} });
+        Object.assign(s, { phase: 'voting', phaseAt: now, votes: {}, audience: {} });
         return withHistory(state, s);
       }
       case 'revote': {
         if (s.phase !== 'voting') fail('Повторное голосование — только во время голосования');
-        Object.assign(s, { votes: {}, phaseAt: now });
+        Object.assign(s, { votes: {}, audience: {}, phaseAt: now });
         return withHistory(state, s);
       }
       case 'vote': {
@@ -227,6 +259,17 @@
         if (!step.options.some(o => o.id === cmd.option)) fail('Нет такого варианта');
         if (s.votes[cmd.role]) fail('Голос уже учтён');
         s.votes[cmd.role] = cmd.option;
+        return s;
+      }
+      case 'audienceVote': {
+        if (s.phase !== 'voting') fail('Голосование закрыто');
+        if (!str(cmd.token) || cmd.token.length > 64) fail('Нет токена устройства');
+        if (Object.values(s.seats).includes(cmd.token)) fail('У вас роль — голосуйте как роль');
+        if (!step.options.some(o => o.id === cmd.option)) fail('Нет такого варианта');
+        s.audience = s.audience || {};
+        if (s.audience[cmd.token]) fail('Голос уже учтён');
+        if (Object.keys(s.audience).length >= AUDIENCE_MAX) fail('Голосов зала слишком много');
+        s.audience[cmd.token] = cmd.option;
         return s;
       }
       case 'reveal': {
@@ -247,8 +290,10 @@
           money: Math.max(0, s.metrics.money + fx.money),
           ttrMin: Math.max(0, s.metrics.ttrMin + fx.ttrMin),
         };
+        const aud = tallyAudience(pack, s);
         s.journal.push({
           stepId: step.id, optionId, decidedBy, votes: Object.assign({}, s.votes),
+          audience: { counts: aud.counts, total: aud.total, leader: aud.leader },
           sec: Math.max(0, Math.round((now - s.stepAt) / 1000)), gained: o.score, trap: !!o.trap,
         });
         Object.assign(s, { phase: 'revealed', revealed: optionId, phaseAt: now });
@@ -257,7 +302,7 @@
       case 'next': {
         if (s.phase !== 'revealed') fail('Дальше — после раскрытия');
         if (s.stepIndex + 1 >= pack.steps.length) Object.assign(s, { phase: 'end', endedAt: now, phaseAt: now });
-        else Object.assign(s, { phase: 'situation', stepIndex: s.stepIndex + 1, votes: {}, revealed: null, stepAt: now, phaseAt: now });
+        else Object.assign(s, { phase: 'situation', stepIndex: s.stepIndex + 1, votes: {}, audience: {}, revealed: null, stepAt: now, phaseAt: now });
         return withHistory(state, s);
       }
       case 'finish': {
@@ -268,7 +313,8 @@
       case 'undo': {
         if (!s.history.length) fail('Откатывать нечего');
         const prev = s.history[s.history.length - 1];
-        return Object.assign(clone(prev), { seats: s.seats, history: s.history.slice(0, -1) });
+        // Голоса зала текущего шага переживают откат внутри шага (например, отмену раскрытия).
+        return Object.assign(clone(prev), { seats: s.seats, sound: s.sound, audience: prev.stepIndex === s.stepIndex ? s.audience || {} : {}, history: s.history.slice(0, -1) });
       }
       default:
         fail('Неизвестная команда');
@@ -282,16 +328,20 @@
       const st = pack.steps.find(x => x.id === j.stepId);
       const o = st.options.find(x => x.id === j.optionId);
       const b = bestOption(st);
+      const a = j.audience && j.audience.total ? j.audience : null;
+      const leader = a && a.leader && st.options.find(x => x.id === a.leader);
       return {
         stepId: st.id, title: st.title, label: o.label, bestLabel: b.label, isBest: o.id === b.id,
         verdict: verdict(st, o), gained: j.gained, trap: j.trap, sec: j.sec, decidedBy: j.decidedBy,
         votes: Object.keys(j.votes).length,
+        audience: a && { total: a.total, leaderLabel: leader ? leader.label : null, agree: a.leader === o.id, leaderIsBest: a.leader === b.id },
       };
     });
     const max = maxScore(pack);
     return {
       score: state.score, max, metrics: state.metrics,
       best: steps.filter(x => x.isBest).length, traps: steps.filter(x => x.trap).length,
+      audienceSplit: steps.filter(x => x.audience && x.audience.leaderLabel && !x.audience.agree).length,
       totalSec: steps.reduce((a, x) => a + x.sec, 0), steps, grade: grade(pack, state.score),
       complete: state.journal.length === pack.steps.length,
     };
@@ -311,7 +361,8 @@
       `Напряжение: ${s.metrics.tension} · потери: ${rub(s.metrics.money)} · TTR: ${s.metrics.ttrMin} мин · время игры: ${mmss(s.totalSec)}`,
       '', '## Решения по порядку', '',
     ];
-    s.steps.forEach((x, i) => lines.push(`${i + 1}. **${x.title}** (${mmss(x.sec)}): ${x.label} — ${x.verdict.label.toLowerCase()}, ${signed(x.gained)}` + (x.isBest ? '' : `. Лучше: ${x.bestLabel}`)));
+    s.steps.forEach((x, i) => lines.push(`${i + 1}. **${x.title}** (${mmss(x.sec)}): ${x.label} — ${x.verdict.label.toLowerCase()}, ${signed(x.gained)}` + (x.isBest ? '' : `. Лучше: ${x.bestLabel}`)
+      + (x.audience && x.audience.leaderLabel && !x.audience.agree ? `. Зал (${x.audience.total}) выбрал бы: ${x.audience.leaderLabel}` : '')));
     lines.push('', '## Дольше всего думали', '');
     s.steps.slice().sort((a, b) => b.sec - a.sec).slice(0, 3).forEach(x => lines.push(`- ${x.title} — ${mmss(x.sec)}`));
     lines.push('', '## Причина', '', pack.end.rootCause, '', '## Вопросы для разбора', '');
@@ -327,7 +378,8 @@
     if (!state.revealed) return null;
     const o = step.options.find(x => x.id === state.revealed);
     const j = state.journal[state.journal.length - 1];
-    return { optionId: o.id, label: o.label, revealText: o.revealText, verdict: verdict(step, o), gained: o.score, effects: o.effects, decidedBy: j && j.decidedBy };
+    return { optionId: o.id, label: o.label, revealText: o.revealText, verdict: verdict(step, o), gained: o.score, effects: o.effects, decidedBy: j && j.decidedBy,
+      audience: j && j.audience && j.audience.total ? { counts: j.audience.counts, total: j.audience.total } : null };
   }
 
   function common(pack, state, now) {
@@ -338,6 +390,7 @@
       phaseAt: state.phaseAt, phaseSec: PHASE_SEC[state.phase] || null, now,
       seats: ROLE_IDS.map(r => ({ id: r, name: pack.roles[r].name, taken: !!state.seats[r], voted: !!state.votes[r] })),
       votedCount: Object.keys(state.votes).length,
+      audienceCount: Object.keys(state.audience || {}).length,
       step: step && { id: step.id, title: step.title, brief: step.brief, question: step.question || 'Что делаем?', options: step.options.map(o => ({ id: o.id, label: o.label })) },
       revealed: step && publicReveal(step, state),
     };
@@ -357,17 +410,21 @@
       return Object.assign(v, {
         view: 'screen', diagram: pack.diagram, score: state.score, maxScore: maxScore(pack), metrics: state.metrics,
         moneyLimit: pack.meta.moneyLimit, focus: step ? step.focus || [] : [], diagramState: step ? step.state || {} : {},
+        sound: !!state.sound,
         summary: state.phase === 'end' ? publicSummary(pack, state) : null,
       });
     }
     if (audience === 'play') {
-      const role = opts.role && ROLE_IDS.includes(opts.role) && opts.token && state.seats[opts.role] === opts.token ? opts.role : null;
+      // Роль определяется по токену устройства: после жребия место телефона могло смениться.
+      const role = opts.token ? ROLE_IDS.find(r => state.seats[r] === opts.token) || null : null;
       const r = role && pack.roles[role];
       return Object.assign(v, {
         view: 'play',
         role: role && { id: role, name: r.name, mission: r.mission, welcomePrivate: r.welcomePrivate },
         private: role && step ? step.private[role] : null,
         myVote: role ? state.votes[role] || null : null,
+        // Зритель без роли тоже голосует — как подсказка для разбора.
+        audienceVote: !role && opts.token ? (state.audience || {})[opts.token] || null : null,
         score: state.score, maxScore: maxScore(pack),
         summary: state.phase === 'end' ? { grade: grade(pack, state.score), score: state.score, max: maxScore(pack) } : null,
       });
@@ -381,7 +438,8 @@
       return Object.assign(v, {
         view: 'gm', step: full, roles: pack.roles, diagram: pack.diagram,
         focus: step ? step.focus || [] : [], diagramState: step ? step.state || {} : {},
-        votes: state.votes, tally: step ? tally(pack, state) : null,
+        votes: state.votes, tally: step ? tally(pack, state) : null, audience: step ? tallyAudience(pack, state) : null,
+        sound: !!state.sound,
         score: state.score, maxScore: maxScore(pack), metrics: state.metrics, moneyLimit: pack.meta.moneyLimit,
         canUndo: state.history.length > 0, journal: state.journal,
         upcoming: pack.steps.slice(state.stepIndex + 1).map(x => x.title),
@@ -395,6 +453,6 @@
   return {
     ROLE_IDS, PHASE_SEC, START_TENSION,
     validate, maxScore, minScore, bestOption, verdict, grade,
-    createSession, apply, tally, summary, report, view,
+    createSession, apply, tally, tallyAudience, summary, report, view,
   };
 });

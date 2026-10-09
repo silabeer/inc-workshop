@@ -12,12 +12,18 @@
   - интерфейс на русском;
   - «Новая партия» далеко от «Раскрыть последствия»;
   - проектор и телефоны не показывают приватку чужих ролей;
+  - QR-код в лобби читается декодером и ведёт на адрес для телефонов;
+  - ничья (с голосом Командира и без), бумажный режим (голоса вписывает ведущий), голос зала;
+  - комнаты, код входа, звук, аналитика по архиву;
   - в консоли нет ошибок.
 """
 import os
 import sys
 
 from playwright.sync_api import sync_playwright
+import io
+import zxingcpp
+from PIL import Image
 
 BASE = os.environ['UI_BASE']  # задаёт run.js: свой сервер на свободном порту
 OUT = os.path.join(os.path.dirname(__file__), 'out')
@@ -123,12 +129,24 @@ def run():
         def new_page(w, h):
             # browser.new_page — отдельный контекст: у каждого «телефона» свой localStorage и токен.
             pg = browser.new_page(viewport={'width': w, 'height': h})
-            pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' and 'favicon' not in m.text else None)
+            pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' and 'favicon' not in m.text and '403' not in m.text else None)
             pg.on('pageerror', lambda e: errors.append(str(e)))
             return pg
 
         def wait_text(pg, text):
             pg.wait_for_function('t => document.body.innerText.includes(t)', arg=text, timeout=5000)
+
+        def gm_view(pg):
+            # Текущее представление пульта — из потока SSE (первое сообщение).
+            return pg.evaluate("""async () => {
+              const ac = new AbortController(); const r = await fetch('/events?view=gm', {signal: ac.signal});
+              const rd = r.body.getReader(); let b = '';
+              while (!b.includes('\\n\\n')) b += new TextDecoder().decode((await rd.read()).value);
+              ac.abort(); return JSON.parse(b.slice(b.indexOf('data: ') + 6, b.indexOf('\\n\\n')));
+            }""")
+
+        def opt(pg, i):
+            return gm_view(pg)['step']['options'][i]['id']
 
         # ---------- Лобби ----------
         print('Лобби')
@@ -138,29 +156,50 @@ def run():
         gm.evaluate('window.confirm = () => true')
         proj = new_page(1920, 1080)
         proj.goto(BASE + '/#screen')
-        proj.wait_for_selector('.s-lobby')
+        proj.wait_for_selector('.s-lobby svg.qr')
+        proj.wait_for_timeout(300)
+        png = proj.locator('svg.qr').screenshot()
+        got = zxingcpp.read_barcodes(Image.open(io.BytesIO(png)))
+        url = proj.locator('.s-join .url').inner_text()
+        check(got and got[0].text == url, f'QR в лобби не читается или ведёт не туда: {got[0].text if got else None!r} ≠ {url!r}')
+        check(url.endswith('/#play'), f'адрес для телефонов: {url}')
 
+        names = {'Командир инцидента': 'commander', 'Скаут наблюдаемости': 'scout', 'Инженер платформы': 'engineer', 'Доменный специалист': 'domain', 'Связной с бизнесом': 'comms'}
         phones = {}
-        for role in ['scout', 'comms']:
-            ph = new_page(390, 844)
-            ph.goto(BASE + '/#play')
-            ph.wait_for_selector('.p-roles')
-            if role == 'scout':
-                shot(ph, 'phone-picker', full=True)
-                phone_checks(ph, 'телефон/выбор роли')
-            ph.locator('.p-roles button:not([disabled])', has_text={'scout': 'Скаут', 'comms': 'Связной'}[role]).click()
-            wait_text(ph, 'Ваша миссия')
-            phones[role] = ph
-        shot(phones['scout'], 'phone-lobby', full=True)
-        for role in ['commander', 'engineer', 'domain']:
+        ph = new_page(390, 844)
+        ph.goto(BASE + '/#play')
+        ph.wait_for_selector('.p-roles')
+        shot(ph, 'phone-picker', full=True)
+        phone_checks(ph, 'телефон/выбор роли')
+        ph.locator('.p-roles button', has_text='Скаут').click()
+        wait_text(ph, 'Ваша миссия')
+        phones['scout'] = ph
+        ph = new_page(390, 844)
+        ph.goto(BASE + '/#play')
+        ph.wait_for_selector('.p-roles')
+        ph.get_by_role('button', name='Мне любую свободную роль').click()
+        wait_text(ph, 'Ваша миссия')
+        anyrole = names.get(ph.locator('.p-head .who').inner_text().strip())
+        check(anyrole and anyrole != 'scout', f'жребий выдал роль: {anyrole}')
+        phones[anyrole] = ph
+        shot(ph, 'phone-lobby', full=True)
+        api_roles = [r for r in ROLES if r not in phones]
+        for role in api_roles:
             check(api(gm, '/api/claim', {'role': role, 'token': 'tok-' + role}) == 200, f'claim {role}')
+        spec = new_page(390, 844)
+        spec.goto(BASE + '/#play')
+        spec.wait_for_selector('.p-roles')
+        spec.get_by_role('button', name='Я в зале — голосовать как зритель').click()
+        wait_text(spec, 'Ждём старта')
         wait_text(proj, '5 из 5')
         shot(proj, 'screen-lobby')
         contrast(proj, 'проектор/лобби')
+        gm.locator('.g-check input').check()
+        wait_text(proj, 'Звук включён ведущим')
         shot(gm, 'gm-lobby', full=True)
         contrast(gm, 'пульт/лобби')
 
-        # ---------- Шаг: ситуация, обсуждение, голосование ----------
+        # ---------- Шаг 1: ситуация, обсуждение, голосование ролей и зала ----------
         print('Раунд')
         gm.get_by_role('button', name='Начать игру').click()
         proj.wait_for_selector('.s-options')
@@ -176,17 +215,22 @@ def run():
         wait_text(phones['scout'], 'Голосование открыто')
         shot(phones['scout'], 'phone-voting', full=True)
         phone_checks(phones['scout'], 'телефон/голосование')
-        priv = phones['scout'].inner_text('body')
-        check('Должен донести' not in priv, 'телефон видит приватку других ролей')
+        check('Должен донести' not in phones['scout'].inner_text('body'), 'телефон видит приватку других ролей')
         phones['scout'].locator('.p-vote button').first.click()
         wait_text(phones['scout'], 'Голос учтён')
-        # Ещё два голоса — через API (вторым вариантом шага): на проекторе виден счётчик, на пульте — подсчёт.
-        opt2 = gm.evaluate("async () => (await (await fetch('/api/pack')).json()).steps[0].options[1].id")
-        for role in ['commander', 'engineer']:
-            check(api(gm, '/api/vote', {'role': role, 'token': 'tok-' + role, 'option': opt2}) == 200, f'голос {role}')
+        o2 = opt(gm, 1)
+        for role in api_roles[:2]:
+            check(api(gm, '/api/vote', {'role': role, 'token': 'tok-' + role, 'option': o2}) == 200, f'голос {role}')
+        wait_text(spec, 'Голосуйте')
+        spec.locator('.p-vote button').nth(1).click()
+        wait_text(spec, 'Ваш голос учтён')
+        shot(spec, 'phone-spectator', full=True)
+        phone_checks(spec, 'телефон/зритель')
         wait_text(proj, 'Проголосовали 3 из 5')
+        wait_text(proj, 'Зал: 1 голос')
         shot(proj, 'screen-voting')
         contrast(proj, 'проектор/голосование')
+        wait_text(gm, 'Зал (1)')
         shot(gm, 'gm-voting', full=True)
         contrast(gm, 'пульт/голосование')
         english(gm, 'пульт')
@@ -200,12 +244,14 @@ def run():
         check(gap > 200, f'пульт: «Новая партия» в {gap:.0f}px от «Раскрыть последствия» (нужно > 200)')
         gm.get_by_role('button', name='Раскрыть последствия').click()
         proj.wait_for_selector('.s-reveal')
+        proj.wait_for_selector('.s-aud')
         proj.wait_for_timeout(1000)
         shot(proj, 'screen-reveal')
         contrast(proj, 'проектор/последствия')
-        wait_text(phones['comms'], 'Команда выбрала')
-        shot(phones['comms'], 'phone-reveal', full=True)
-        phone_checks(phones['comms'], 'телефон/последствия')
+        other = [r for r in phones if r != 'scout'][0]
+        wait_text(phones[other], 'Команда выбрала')
+        shot(phones[other], 'phone-reveal', full=True)
+        phone_checks(phones[other], 'телефон/последствия')
         shot(gm, 'gm-reveal', full=True)
 
         # ---------- Проектор 1280×720, обе темы ----------
@@ -223,20 +269,49 @@ def run():
             contrast(small, f'проектор 720p/{theme}')
             small.close()
 
+        # ---------- Шаг 2: ничья без голоса Командира — выбирает ведущий ----------
+        print('Ничья и бумажный режим')
+        api(gm, '/api/cmd', {'type': 'voting'})
+        voters = [r for r in api_roles if r != 'commander'][:2]
+        if len(voters) == 2:
+            api(gm, '/api/vote', {'role': voters[0], 'token': 'tok-' + voters[0], 'option': opt(gm, 0)})
+            api(gm, '/api/vote', {'role': voters[1], 'token': 'tok-' + voters[1], 'option': opt(gm, 1)})
+            wait_text(gm, 'Ничья. Командир называет вариант')
+            check(gm.get_by_role('button', name='Раскрыть последствия').is_disabled(), 'ничья без Командира: «Раскрыть последствия» должна быть недоступна')
+            shot(gm, 'gm-tie', full=True)
+            gm.locator('.g-opt button', has_text='Раскрыть этот вариант').nth(1).click()
+            wait_text(proj, 'выбор ведущего')
+        else:
+            api(gm, '/api/cmd', {'type': 'reveal', 'option': opt(gm, 1)})
+        api(gm, '/api/cmd', {'type': 'next'})
+
+        # ---------- Шаг 3: бумажный режим — ведущий вписывает голоса, ничья решается голосом Командира ----------
+        api(gm, '/api/cmd', {'type': 'voting'})
+        gm.wait_for_selector('select[aria-label="Голос за роль Командир инцидента"]')
+        first, second = opt(gm, 0), opt(gm, 1)
+        for role_name, o in [('Командир инцидента', first), ('Доменный специалист', second)]:
+            sel = gm.locator(f'select[aria-label="Голос за роль {role_name}"]')
+            if sel.count():
+                sel.select_option(o)
+                gm.wait_for_timeout(250)
+        wait_text(gm, 'решает голос Командира')
+        gm.get_by_role('button', name='Раскрыть последствия').click()
+        wait_text(proj, 'решил Командир при ничьей')
+        shot(proj, 'screen-commander-tiebreak')
+        api(gm, '/api/cmd', {'type': 'next'})
+
         # ---------- Остальные шаги — командами пульта ----------
         print('До финала')
         for _ in range(80):
-            phase = gm.evaluate("async () => (await (await fetch('/healthz')).json()).phase")
-            if phase == 'end':
+            ph_ = gm_view(gm)['phase']
+            if ph_ == 'end':
                 break
-            if phase == 'situation':
+            if ph_ == 'situation':
                 api(gm, '/api/cmd', {'type': 'voting'})
-            elif phase == 'voting':
-                gm.wait_for_selector('.g-opt')
-                gm.locator('.g-opt button', has_text='Раскрыть этот вариант').first.click()
-            elif phase == 'revealed':
+            elif ph_ == 'voting':
+                api(gm, '/api/cmd', {'type': 'reveal', 'option': opt(gm, 0)})
+            elif ph_ == 'revealed':
                 api(gm, '/api/cmd', {'type': 'next'})
-            gm.wait_for_timeout(150)
         proj.wait_for_selector('.recap')
         shot(proj, 'screen-final')
         contrast(proj, 'проектор/итоги')
@@ -246,12 +321,43 @@ def run():
         wait_text(phones['scout'], 'Очки команды')
         shot(phones['scout'], 'phone-final', full=True)
 
-        # ---------- Карточки ----------
+        # ---------- Аналитика и карточки ----------
+        stats = new_page(1280, 900)
+        stats.goto(BASE + '/#stats')
+        stats.wait_for_selector('.st-table')
+        shot(stats, 'stats', full=True)
+        contrast(stats, 'аналитика')
+        english(stats, 'аналитика')
         cards = new_page(1000, 1200)
         cards.goto(BASE + '/#cards')
         cards.wait_for_selector('.card')
         shot(cards, 'cards')
         contrast(cards, 'карточки')
+
+        # ---------- Комнаты и код входа ----------
+        print('Комнаты')
+        gm.get_by_role('button', name='Новая партия').click()
+        gm.wait_for_selector('.g-cases')
+        gm.locator('input[aria-label="Имя новой комнаты"]').fill('stol-2')
+        gm.get_by_role('button', name='Создать комнату').click()
+        wait_text(gm, 'stol-2')
+        shot(gm, 'gm-rooms', full=True)
+        check(api(gm, '/api/cmd?room=stol-2', {'type': 'joinCode', 'code': 'K7Q2'}) == 200, 'код входа в комнате stol-2')
+        rp = new_page(1920, 1080)
+        rp.goto(BASE + '/r/stol-2/#screen')
+        rp.wait_for_selector('.s-lobby')
+        check('/r/stol-2/#play' in rp.locator('.s-join .url').inner_text(), 'проектор комнаты показывает адрес комнаты')
+        wait_text(rp, 'Код входа скажет ведущий')
+        phc = new_page(390, 844)
+        phc.goto(BASE + '/r/stol-2/#play')
+        phc.wait_for_selector('.p-code')
+        shot(phc, 'phone-join-code', full=True)
+        phone_checks(phc, 'телефон/код входа')
+        phc.locator('.p-code').fill('K7Q2')
+        phc.get_by_role('button', name='Продолжить').click()
+        phc.locator('.p-roles button', has_text='Связной').click()
+        wait_text(phc, 'Ваша миссия')
+        wait_text(rp, '1 из 5')
 
         check(not errors, f'ошибки в консоли: {errors[:5]}')
         browser.close()

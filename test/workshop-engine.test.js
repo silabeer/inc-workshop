@@ -238,3 +238,63 @@ test('после раскрытия проектор показывает вер
   assert.equal(v.revealed.revealText, 'Стало хуже');
   assert.equal(v.revealed.debrief, undefined);
 });
+
+test('голос зала: один на устройство, только во время голосования, на решение не влияет', () => {
+  let s = votes(voting(), { scout: 'A', engineer: 'A' });
+  s = E.apply(PACK, s, { type: 'audienceVote', token: 'z1', option: 'B' }, 1);
+  s = E.apply(PACK, s, { type: 'audienceVote', token: 'z2', option: 'B' }, 1);
+  s = E.apply(PACK, s, { type: 'audienceVote', token: 'z3', option: 'C' }, 1);
+  assert.throws(() => E.apply(PACK, s, { type: 'audienceVote', token: 'z1', option: 'C' }, 1), /уже учтён/);
+  assert.deepEqual(E.tallyAudience(PACK, s), { counts: { A: 0, B: 2, C: 1 }, total: 3, leader: 'B' });
+  const r = E.apply(PACK, s, { type: 'reveal' }, 9000);
+  assert.equal(r.revealed, 'A', 'зал не решает');
+  assert.deepEqual(r.journal[0].audience, { counts: { A: 0, B: 2, C: 1 }, total: 3, leader: 'B' });
+  assert.throws(() => E.apply(PACK, r, { type: 'audienceVote', token: 'z9', option: 'A' }, 1), /закрыто/);
+  const next = E.apply(PACK, r, { type: 'next' }, 10000);
+  assert.deepEqual(next.audience, {}, 'голоса зала обнуляются на новом шаге');
+});
+
+test('голос зала: устройство с ролью голосует как роль, а не как зал', () => {
+  let s = E.apply(PACK, E.createSession(PACK), { type: 'claim', role: 'scout', token: 'tok' }, 1);
+  s = run(s, { type: 'start' }, { type: 'voting' });
+  assert.throws(() => E.apply(PACK, s, { type: 'audienceVote', token: 'tok', option: 'A' }, 1), /голосуйте как роль/);
+});
+
+test('голос зала в итогах, отчёте и представлениях', () => {
+  let s = votes(voting(), { scout: 'A' });
+  s = E.apply(PACK, s, { type: 'audienceVote', token: 'z1', option: 'C' }, 1);
+  const screenVoting = E.view(PACK, s, 'screen', { now: 1 });
+  assert.equal(screenVoting.audienceCount, 1);
+  assert.equal(JSON.stringify(screenVoting).includes('"C":1'), false, 'до раскрытия проектор не показывает, за что голосует зал');
+  assert.equal(E.view(PACK, s, 'play', { token: 'z1', now: 1 }).audienceVote, 'C');
+  assert.equal(E.view(PACK, s, 'gm', { now: 1 }).audience.counts.C, 1);
+  s = E.apply(PACK, s, { type: 'reveal' }, 2);
+  assert.equal(E.view(PACK, s, 'screen', { now: 2 }).revealed.audience.counts.C, 1);
+  const sum = E.summary(PACK, s);
+  assert.equal(sum.steps[0].audience.leaderLabel, 'Подождать');
+  assert.equal(sum.steps[0].audience.agree, false);
+  assert.equal(sum.audienceSplit, 1);
+  assert.match(E.report(PACK, s), /Зал \(1\) выбрал бы: Подождать/);
+});
+
+test('жребий: перестановка мест только в лобби и только корректная', () => {
+  let s = E.createSession(PACK);
+  s = E.apply(PACK, s, { type: 'claim', role: 'commander', token: 'a' }, 1);
+  s = E.apply(PACK, s, { type: 'claim', role: 'scout', token: 'b' }, 1);
+  const perm = ['scout', 'commander', 'engineer', 'domain', 'comms'];
+  const r = E.apply(PACK, s, { type: 'shuffle', perm }, 2);
+  assert.equal(r.seats.commander, 'b');
+  assert.equal(r.seats.scout, 'a');
+  assert.throws(() => E.apply(PACK, s, { type: 'shuffle', perm: ['scout', 'scout', 'engineer', 'domain', 'comms'] }, 2), /перестановка/);
+  const started = E.apply(PACK, s, { type: 'start' }, 3);
+  assert.throws(() => E.apply(PACK, started, { type: 'shuffle', perm }, 4), /только в лобби/);
+});
+
+test('звук: настройка переживает откат', () => {
+  let s = E.apply(PACK, E.createSession(PACK), { type: 'start' }, 1);
+  s = E.apply(PACK, s, { type: 'sound', on: true }, 2);
+  assert.equal(E.view(PACK, s, 'screen', { now: 2 }).sound, true);
+  s = E.apply(PACK, s, { type: 'undo' }, 3);
+  assert.equal(s.phase, 'lobby');
+  assert.equal(s.sound, true);
+});

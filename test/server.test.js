@@ -41,9 +41,8 @@ test('полный раунд по HTTP: роли занимают места, �
   assert.equal((await s.post('/api/vote', { role: 'scout', token: 'tok-scout', option: 'A' })).status, 200);
   assert.equal((await s.post('/api/vote', { role: 'engineer', token: 'tok-engineer', option: 'A' })).status, 200);
   assert.equal((await cmd(s, { type: 'reveal' })).status, 200);
-  const h = await s.get('/healthz');
-  assert.equal(h.body.phase, 'revealed');
   const gm = await firstEvent(s.port, 'view=gm');
+  assert.equal(gm.view.phase, 'revealed');
   assert.equal(gm.view.score, 2);
   assert.equal(gm.view.journal[0].optionId, 'A');
 });
@@ -186,7 +185,7 @@ test('статика: страница, тема, шрифты, ui-скрипт�
 test('/healthz и /api/info', async (t) => {
   const s = await start(t, { gmPin: '1' });
   const h = await s.get('/healthz');
-  assert.deepEqual(Object.keys(h.body).sort(), ['clients', 'gmPin', 'ok', 'phase', 'scenarioId']);
+  assert.deepEqual(Object.keys(h.body).sort(), ['clients', 'gmPin', 'ok', 'rooms', 'tls']);
   assert.equal(h.body.gmPin, true);
   const i = await s.get('/api/info');
   assert.ok(Array.isArray(i.body.playUrls));
@@ -198,5 +197,210 @@ test('реальные паки из scenarios/ загружаются серв�
   const errors = [];
   const packs = loadPacks(path.join(__dirname, '..', 'scenarios'), m => errors.push(m));
   assert.deepEqual(errors, []);
-  assert.deepEqual(packs.map(p => p.meta.id).sort(), ['expired-cert', 'phantom-network']);
+  const ids = packs.map(p => p.meta.id);
+  for (const id of ['expired-cert', 'phantom-network']) assert.ok(ids.includes(id), id);
+});
+
+const cmdIn = (s, room, body, pin) => s.post('/api/cmd?room=' + room, body, pin ? { 'x-gm-pin': pin } : {});
+
+test('комнаты: создать, партии независимы, удалить с архивом; основную удалить нельзя', async (t) => {
+  const s = await start(t);
+  assert.equal((await s.post('/api/rooms', { action: 'create', id: 'Stol-2' })).status, 200, 'имя приводится к нижнему регистру');
+  assert.equal((await s.post('/api/rooms', { action: 'create', id: 'stol-2' })).status, 409);
+  assert.equal((await s.post('/api/rooms', { action: 'create', id: 'плохое имя' })).status, 400);
+  await cmdIn(s, 'stol-2', { type: 'start' });
+  assert.equal((await firstEvent(s.port, 'room=stol-2&view=screen')).view.phase, 'situation');
+  assert.equal((await firstEvent(s.port, 'view=screen')).view.phase, 'lobby', 'main не тронута');
+  const gm = (await firstEvent(s.port, 'view=gm')).view;
+  assert.deepEqual(gm.rooms.map(r => r.id).sort(), ['main', 'stol-2']);
+  await cmdIn(s, 'stol-2', { type: 'voting' }); await cmdIn(s, 'stol-2', { type: 'reveal', option: 'A' });
+  assert.equal((await s.post('/api/rooms', { action: 'delete', id: 'stol-2' })).status, 200);
+  assert.equal((await firstEvent(s.port, 'room=stol-2&view=screen')).status, 404);
+  assert.equal((await s.get('/archive')).body[0].room, 'stol-2');
+  assert.equal((await s.post('/api/rooms', { action: 'delete', id: 'main' })).status, 400);
+  assert.equal((await s.post('/api/cmd?room=nope', { type: 'start' })).status, 404);
+});
+
+test('комнаты: страница /r/<комната>/ и переживают рестарт; старый state.json становится комнатой main', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-srv-'));
+  const session = require('../workshop-engine.js').createSession(MINI, { team: 'Старая' });
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ scenarioId: 'mini', session }));
+  const s1 = await start(t, { dir });
+  assert.equal((await firstEvent(s1.port, 'view=screen')).view.team, 'Старая');
+  await s1.post('/api/rooms', { action: 'create', id: 'b' });
+  await cmdIn(s1, 'b', { type: 'team', team: 'Вторые' });
+  const page = await fetch(`${BASE}:${s1.port}/r/b/`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /<!DOCTYPE html>/);
+  const redirect = await fetch(`${BASE}:${s1.port}/r/b`, { redirect: 'manual' });
+  assert.equal(redirect.status, 301);
+  await new Promise(res => s1.srv.close(res));
+  const s2 = await start(t, { dir });
+  assert.equal((await firstEvent(s2.port, 'room=b&view=screen')).view.team, 'Вторые');
+});
+
+test('код входа: роль и голос зала только с кодом; ведущий видит код, проектор — только факт', async (t) => {
+  const s = await start(t);
+  assert.equal((await cmd(s, { type: 'joinCode', code: 'ab' })).status, 400);
+  await cmd(s, { type: 'joinCode', code: 'K7Q2' });
+  assert.equal((await s.post('/api/claim', { role: 'scout', token: 't' })).status, 403);
+  assert.equal((await s.post('/api/claim', { role: 'scout', token: 't', code: 'K7Q2' })).status, 200);
+  assert.equal((await firstEvent(s.port, 'view=gm')).view.joinCode, 'K7Q2');
+  const screen = (await firstEvent(s.port, 'view=screen')).view;
+  assert.equal(screen.joinRequired, true);
+  assert.ok(!JSON.stringify(screen).includes('K7Q2'));
+  await cmd(s, { type: 'start' }); await cmd(s, { type: 'voting' });
+  assert.equal((await s.post('/api/audience', { token: 'z', option: 'A' })).status, 403);
+  assert.equal((await s.post('/api/audience', { token: 'z', option: 'A', code: 'K7Q2' })).status, 200);
+});
+
+test('перебор PIN: после 10 неудач адрес получает 429 даже с верным PIN', async (t) => {
+  const s = await start(t, { gmPin: '4821' });
+  for (let i = 0; i < 10; i++) assert.equal((await s.get('/api/auth', { 'x-gm-pin': String(i) })).status, 401);
+  assert.equal((await s.get('/api/auth', { 'x-gm-pin': '4821' })).status, 429);
+  assert.equal((await cmd(s, { type: 'start' }, '4821')).status, 429);
+});
+
+test('«любая свободная роль»: жребий среди свободных, повтор возвращает ту же роль', async (t) => {
+  const s = await start(t);
+  for (const r of ['commander', 'scout', 'engineer', 'domain']) await s.post('/api/claim', { role: r, token: 'tok-' + r });
+  const a = await s.post('/api/claim', { role: 'any', token: 'new' });
+  assert.equal(a.status, 200);
+  assert.equal(a.body.role, 'comms');
+  assert.equal((await s.post('/api/claim', { role: 'any', token: 'new' })).body.role, 'comms');
+  const full = await s.post('/api/claim', { role: 'any', token: 'other' });
+  assert.equal(full.status, 409);
+});
+
+test('жребий ведущего: занятые устройства остаются занятыми, роли перемешаны, телефон видит новую роль', async (t) => {
+  const s = await start(t);
+  for (const r of ['commander', 'scout']) await s.post('/api/claim', { role: r, token: 'tok-' + r });
+  assert.equal((await cmd(s, { type: 'shuffle' })).status, 200);
+  const seen = [];
+  for (const tok of ['tok-commander', 'tok-scout']) {
+    // Телефон переподключается со старой ролью в адресе — сервер находит место по токену.
+    const v = (await firstEvent(s.port, `view=play&role=${tok.slice(4)}&token=${tok}`)).view;
+    assert.ok(v.role, 'после жребия телефон не теряет роль');
+    seen.push(v.role.id);
+  }
+  assert.equal(new Set(seen).size, 2);
+});
+
+test('одно устройство — одна роль: новая роль освобождает прежнюю', async (t) => {
+  const s = await start(t);
+  await s.post('/api/claim', { role: 'scout', token: 'a' });
+  await s.post('/api/claim', { role: 'engineer', token: 'a' });
+  const v = (await firstEvent(s.port, 'view=screen')).view;
+  assert.deepEqual(v.seats.filter(x => x.taken).map(x => x.id), ['engineer']);
+});
+
+test('PIN с не-ASCII байтами не роняет сервер', async (t) => {
+  const s = await start(t, { gmPin: '1234' });
+  assert.equal((await firstEvent(s.port, 'view=gm&pin=%C3%BF%C3%BF%C3%BF%C3%BF')).status, 401);
+  const r = await new Promise((res, rej) => require('http').get({ host: '127.0.0.1', port: s.port, path: '/api/auth', headers: { 'x-gm-pin': Buffer.from([0xff, 0xfe, 0x80, 0x81]).toString('latin1') } }, res).on('error', rej));
+  r.resume();
+  assert.equal(r.statusCode, 401);
+  assert.equal((await s.get('/healthz')).status, 200, 'сервер жив');
+});
+
+test('за прокси блокировка по самому правому адресу: подделанный X-Forwarded-For не помогает', async (t) => {
+  const s = await start(t, { gmPin: '4821', trustProxy: true });
+  for (let i = 0; i < 10; i++) await s.get('/api/auth', { 'x-gm-pin': 'x', 'x-forwarded-for': `10.0.0.${i}, 7.7.7.7` });
+  assert.equal((await s.get('/api/auth', { 'x-gm-pin': 'x', 'x-forwarded-for': '10.9.9.9, 7.7.7.7' })).status, 429);
+  assert.equal((await s.get('/api/auth', { 'x-gm-pin': '4821', 'x-forwarded-for': '8.8.8.8' })).status, 200, 'другой клиент не заблокирован');
+});
+
+test('опечатки зала в коде входа не запирают ведущего', async (t) => {
+  const s = await start(t, { gmPin: '4821' });
+  await cmd(s, { type: 'joinCode', code: 'K7Q2' }, '4821');
+  for (let i = 0; i < 12; i++) await s.post('/api/claim', { role: 'scout', token: 't', code: 'oops' + i });
+  assert.equal((await s.post('/api/claim', { role: 'scout', token: 't', code: 'K7Q2' })).status, 429, 'перебор кода блокируется');
+  assert.equal((await s.get('/api/auth', { 'x-gm-pin': '4821' })).status, 200, 'пульт при этом работает');
+});
+
+test('голоса зала: не больше 50 с одного адреса за шаг', async (t) => {
+  const s = await start(t);
+  await cmd(s, { type: 'start' }); await cmd(s, { type: 'voting' });
+  for (let i = 0; i < 50; i++) assert.equal((await s.post('/api/audience', { token: 'z' + i, option: 'A' })).status, 200);
+  assert.equal((await s.post('/api/audience', { token: 'z-лишний', option: 'A' })).status, 429);
+  await cmd(s, { type: 'revote' });
+  assert.equal((await s.post('/api/audience', { token: 'z-новый', option: 'B' })).status, 200, 'новое голосование — новый счётчик');
+});
+
+test('state.json, не сходящийся с паком, не роняет сервер', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-srv-'));
+  const E = require('../workshop-engine.js');
+  let session = E.createSession(MINI, { team: 'Сломанная' });
+  session = E.apply(MINI, E.apply(MINI, E.apply(MINI, session, { type: 'start' }, 1), { type: 'voting' }, 2), { type: 'reveal', option: 'A' }, 3);
+  session.journal[0].stepId = 'исчез';
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ version: 3, rooms: { main: { scenarioId: 'mini', session } } }));
+  const s = await start(t, { dir });
+  const v = (await firstEvent(s.port, 'view=gm')).view;
+  assert.equal(v.phase, 'lobby');
+  assert.equal(v.team, 'Сломанная');
+});
+
+test('PUBLIC_URL: проектор получает публичный адрес, внутренние адреса не раскрываются', async (t) => {
+  const s = await start(t, { publicUrl: 'https://incident.example.org/' });
+  await s.post('/api/rooms', { action: 'create', id: 'b' });
+  assert.deepEqual((await s.get('/api/info')).body.playUrls, ['https://incident.example.org/#play']);
+  assert.deepEqual((await s.get('/api/info?room=b')).body.playUrls, ['https://incident.example.org/r/b/#play']);
+});
+
+test('голос зала через API и звук в представлении проектора', async (t) => {
+  const s = await start(t);
+  await cmd(s, { type: 'sound', on: true });
+  await cmd(s, { type: 'start' }); await cmd(s, { type: 'voting' });
+  assert.equal((await s.post('/api/audience', { token: 'z1', option: 'B' })).status, 200);
+  assert.equal((await s.post('/api/audience', { token: 'z1', option: 'C' })).status, 400);
+  const v = (await firstEvent(s.port, 'view=screen')).view;
+  assert.equal(v.audienceCount, 1);
+  assert.equal(v.sound, true);
+  assert.equal((await firstEvent(s.port, 'view=play&token=z1')).view.audienceVote, 'B');
+});
+
+test('финал пишет архив сам, без токенов устройств; архив и аналитика — только ведущему', async (t) => {
+  const s = await start(t, { gmPin: '1' });
+  await s.post('/api/claim', { role: 'scout', token: 'секретный-токен' });
+  for (const c of [{ type: 'start' }, { type: 'voting' }, { type: 'reveal', option: 'B' }, { type: 'next' }, { type: 'voting' }, { type: 'reveal', option: 'Y' }, { type: 'next' }]) {
+    assert.equal((await cmd(s, c, '1')).status, 200, c.type);
+  }
+  const files = fs.readdirSync(path.join(s.dir, 'archive'));
+  assert.equal(files.length, 1);
+  assert.ok(!fs.readFileSync(path.join(s.dir, 'archive', files[0]), 'utf8').includes('секретный-токен'));
+  // Откат и повторный финал перезаписывают тот же файл, а не плодят копии.
+  await cmd(s, { type: 'undo' }, '1'); await cmd(s, { type: 'next' }, '1');
+  assert.equal(fs.readdirSync(path.join(s.dir, 'archive')).length, 1);
+  assert.equal((await s.get('/archive')).status, 401);
+  assert.equal((await s.get('/api/analytics')).status, 401);
+  const a = await s.get('/api/analytics', { 'x-gm-pin': '1' });
+  assert.equal(a.body[0].scenarioId, 'mini');
+  assert.equal(a.body[0].games, 1);
+  assert.equal(a.body[0].topTraps[0].label, 'Рестартнуть всё');
+});
+
+test('заголовки безопасности на всех ответах', async (t) => {
+  const s = await start(t);
+  for (const p of ['/', '/healthz', '/nope']) {
+    const r = await fetch(`${BASE}:${s.port}${p}`); await r.arrayBuffer();
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff', p);
+    assert.match(r.headers.get('content-security-policy'), /script-src 'self'/, p);
+    assert.equal(r.headers.get('x-frame-options'), 'DENY', p);
+  }
+});
+
+test('HTTPS: с сертификатом сервер отдаёт страницу по TLS и ставит HSTS', async (t) => {
+  const { execFileSync } = require('child_process');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-tls-'));
+  try {
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-subj', '/CN=localhost',
+      '-keyout', path.join(dir, 'key.pem'), '-out', path.join(dir, 'cert.pem')], { stdio: 'ignore' });
+  } catch (e) { t.skip('нет openssl'); return; }
+  const s = await start(t, { dir, tls: { cert: fs.readFileSync(path.join(dir, 'cert.pem')), key: fs.readFileSync(path.join(dir, 'key.pem')) } });
+  const https = require('https');
+  const r = await new Promise((res, rej) => https.get({ host: '127.0.0.1', port: s.port, path: '/healthz', rejectUnauthorized: false }, res).on('error', rej));
+  let body = ''; for await (const ch of r) body += ch;
+  assert.equal(r.statusCode, 200);
+  assert.equal(JSON.parse(body).tls, true);
+  assert.match(r.headers['strict-transport-security'], /max-age/);
 });

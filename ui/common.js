@@ -5,6 +5,11 @@
 
   const $ = id => document.getElementById(id);
 
+  // Комната берётся из адреса: /r/<комната>/ — своя партия; корень — комната main.
+  const ROOM = (location.pathname.match(/^\/r\/([a-z0-9-]+)\//) || [])[1] || 'main';
+  const BASE = ROOM === 'main' ? '/' : '/r/' + ROOM + '/';
+  const api = (p, params) => p + '?' + new URLSearchParams(Object.assign({ room: ROOM }, params || {}));
+
   // h('div', {class: 'x', onclick: fn}, 'текст', h(...)) — дочерние строки становятся текстовыми узлами.
   function h(tag, attrs) {
     const e = document.createElement(tag);
@@ -69,22 +74,39 @@
 
   // Поток представления с сервера. EventSource сам переподключается; offset — разница часов с сервером для таймера.
   let offset = 0;
-  function connect(params, onView) {
-    const es = new EventSource('/events?' + new URLSearchParams(params));
-    es.onmessage = e => {
-      const v = JSON.parse(e.data);
-      if (v.now) offset = v.now - Date.now();
-      setLink(true);
-      try { onView(v); } catch (err) { showError(err); }
+  // Возвращает { close }: при переподключении после ошибки сервера поток подменяется, а вызывающий
+  // по-прежнему закрывает именно текущий.
+  function connect(params, onView, onClosed) {
+    let es = null, closed = false;
+    const open = () => {
+      es = new EventSource(api('/events', params));
+      es.onmessage = e => {
+        const v = JSON.parse(e.data);
+        if (v.now) offset = v.now - Date.now();
+        setLink(true);
+        try { onView(v); } catch (err) { showError(err); }
+      };
+      es.onerror = () => {
+        setLink(false);
+        // Сервер ответил ошибкой, а не пропал: EventSource больше не переподключится. Комнату удалили?
+        if (es.readyState !== EventSource.CLOSED) return;
+        if (onClosed) { onClosed(); return; } // экран решает сам (пульт: не подошёл ли PIN)
+        fetch(api('/api/info')).then(r => {
+          if (r.status !== 404 || fatal) return;
+          const b = $('banner'); b.className = 'banner err';
+          b.textContent = 'Этой комнаты больше нет. Откройте адрес, который даст ведущий.';
+        }).catch(() => {});
+        setTimeout(() => { if (!closed && !fatal && $('banner').className !== 'banner err') open(); }, 5000);
+      };
     };
-    es.onerror = () => setLink(false);
-    return es;
+    open();
+    return { close() { closed = true; es.close(); } };
   }
 
   async function post(url, body, headers) {
     let r;
     try {
-      r = await fetch(url, { method: 'POST', headers: Object.assign({ 'content-type': 'application/json' }, headers || {}), body: JSON.stringify(body) });
+      r = await fetch(url.includes('?') ? url : api(url), { method: 'POST', headers: Object.assign({ 'content-type': 'application/json' }, headers || {}), body: JSON.stringify(body) });
     } catch (e) { toast('Нет связи с сервером'); return { ok: false, status: 0 }; }
     const data = await r.json().catch(() => ({}));
     if (!r.ok && data.error) toast(data.error);
@@ -195,6 +217,42 @@
     del(k) { delete mem[k]; try { localStorage.removeItem(k); } catch (e) { /* только в памяти */ } },
   };
 
+  /* ---------- QR-код (ui/qr.js) как SVG: тёмные модули одним путём, тихая зона 4 модуля ---------- */
+  function qr(text, label) {
+    const q = QR.encode(text), n = q.size + 8;
+    let d = '';
+    q.modules.forEach((row, y) => row.forEach((dark, x) => { if (dark) d += 'M' + (x + 4) + ' ' + (y + 4) + 'h1v1h-1z'; }));
+    const svg = el('svg', { viewBox: '0 0 ' + n + ' ' + n, class: 'qr', role: 'img', 'aria-label': label || ('QR-код: ' + text), 'shape-rendering': 'crispEdges' });
+    svg.appendChild(el('rect', { width: n, height: n, fill: '#fff' }));
+    svg.appendChild(el('path', { d, fill: '#000' }));
+    return svg;
+  }
+
+  /* ---------- Звук конца фазы: короткий двойной сигнал без файлов (WebAudio) ---------- */
+  let audio = null;
+  function audioCtx() {
+    if (!audio && (window.AudioContext || window.webkitAudioContext)) audio = new (window.AudioContext || window.webkitAudioContext)();
+    return audio;
+  }
+  // Браузер разрешает звук только после действия пользователя на странице.
+  const soundReady = () => !!audio && audio.state === 'running';
+  function unlockSound() { const a = audioCtx(); if (a && a.state !== 'running') a.resume().catch(() => {}); }
+  function beep() {
+    const a = audioCtx();
+    if (!a || a.state !== 'running') return false;
+    [0, 0.28].forEach(t => {
+      const o = a.createOscillator(), g = a.createGain();
+      o.type = 'sine'; o.frequency.value = 880;
+      g.gain.setValueAtTime(0.0001, a.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.25, a.currentTime + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t + 0.22);
+      o.connect(g).connect(a.destination);
+      o.start(a.currentTime + t); o.stop(a.currentTime + t + 0.25);
+    });
+    return true;
+  }
+  const serverNow = () => Date.now() + offset;
+
   function toggleTheme() {
     const r = document.documentElement;
     if (r.getAttribute('data-theme') === 'dark') r.removeAttribute('data-theme'); else r.setAttribute('data-theme', 'dark');
@@ -207,5 +265,5 @@
     ta.remove();
   }
 
-  window.UI = { $, h, mount, plural, signed, mmss, rub, PHASES, toast, showError, connect, post, timer, diagram, legend, meters, verdictTag, store, toggleTheme, copy };
+  window.UI = { ROOM, BASE, api, qr, beep, unlockSound, soundReady, serverNow, $, h, mount, plural, signed, mmss, rub, PHASES, toast, showError, connect, post, timer, diagram, legend, meters, verdictTag, store, toggleTheme, copy };
 })();

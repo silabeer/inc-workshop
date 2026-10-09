@@ -31,8 +31,9 @@ const freePort = () => new Promise((res, rej) => {
   }
   if (!ready || exited) { console.error('Тестовый сервер не запустился — UI-проверки не выполнены.'); return stop(1); }
 
-  const ui = spawn(PY, ['-I', path.join(__dirname, 'check_ui.py')], {
-    env: {...process.env, UI_BASE: `http://127.0.0.1:${PORT}`}, stdio: 'inherit',
-  });
-  ui.on('exit', code => stop(code || 0));
+  // Сначала QR-кодер (декодер читает каждый код), потом сценарий в браузере.
+  const py = (script, env) => new Promise(res => spawn(PY, ['-I', path.join(__dirname, script)], {env: {...process.env, ...env}, stdio: 'inherit'}).on('exit', c => res(c || 0)));
+  const qr = await py('check_qr.py', {});
+  const ui = await py('check_ui.py', {UI_BASE: `http://127.0.0.1:${PORT}`});
+  stop(qr || ui);
 })();

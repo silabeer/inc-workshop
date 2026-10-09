@@ -3,8 +3,10 @@
   'use strict';
   const { h, mount, plural, signed, mmss, rub, PHASES, timer, diagram, legend, meters, verdictTag } = UI;
 
-  let playUrls = [];
+  let playUrls = [], publicUrl = false;
   let lastReveal = null;
+  let last = null;
+  let beeped = null; // phaseAt фазы, по которой уже прозвучал сигнал
 
   function bar(v) {
     const right = h('div', { class: 'right' },
@@ -29,14 +31,23 @@
         h('h1', null, v.title),
         h('p', { class: 'lead' }, v.brief),
         h('div', { class: 's-join' },
-          h('p', { class: 'muted' }, 'Пять ролей открывают на телефоне:'),
-          playUrls.length ? playUrls.slice(0, 2).map(u => h('p', { class: 'url' }, u)) : h('p', { class: 'url' }, location.host + '/#play'),
-          h('p', { class: 'muted', style: 'margin-top:.5rem' }, 'Экран телефона не показываем соседям: данные передаём словами, как на настоящем бридже.'))),
+          h('div', { class: 's-qr' }, UI.qr(joinUrl(), 'QR-код для телефонов: ' + joinUrl())),
+          h('div', null,
+            h('p', { class: 'muted' }, 'Роли и зрители открывают на телефоне:'),
+            h('p', { class: 'url' }, joinUrl()),
+            local && !publicUrl && playUrls.length > 1 ? h('p', { class: 'muted' }, 'Если не открывается: ' + playUrls.slice(1, 3).join(' или ')) : null,
+            v.joinRequired ? h('p', { class: 'muted' }, 'Код входа скажет ведущий.') : null,
+            h('p', { class: 'muted', style: 'margin-top:.5rem' }, 'Экран телефона не показываем соседям: данные передаём словами, как на настоящем бридже.')))),
       h('div', { class: 'panel' },
         h('h3', null, 'Команда «' + v.team + '» — ' + taken + ' из 5 на местах'),
         seats(v),
         h('p', { class: 'muted', style: 'margin-top:.8rem' }, 'При ничьей решает Командир инцидента.')));
   }
+
+  // Проектор открыт не с localhost (Docker, прокси, интернет) — значит, этот адрес и доступен телефонам.
+  // С localhost — берём адрес ноутбука в локальной сети от сервера (или PUBLIC_URL).
+  const local = /^(localhost|127\.|\[?::1\]?$)/.test(location.hostname);
+  function joinUrl() { return (!local && !publicUrl) ? location.origin + UI.BASE + '#play' : playUrls[0] || location.origin + UI.BASE + '#play'; }
 
   function aside(v) {
     return h('div', { class: 's-aside' },
@@ -57,7 +68,8 @@
       h('ol', { class: 's-options' }, st.options.map((o, i) => h('li', null, h('span', { class: 'num-badge' }, i + 1), h('span', null, o.label)))),
       v.phase === 'voting' ? h('div', { class: 's-votes' },
         h('span', { class: 'lbl' }, 'Проголосовали ' + v.votedCount + ' из 5'),
-        v.seats.map(s => h('span', { class: 'chip' + (s.voted ? ' on' : '') }, s.name))) : null);
+        v.seats.map(s => h('span', { class: 'chip' + (s.voted ? ' on' : '') }, s.name)),
+        v.audienceCount ? h('span', { class: 's-aud-count' }, 'Зал: ' + v.audienceCount + ' ' + plural(v.audienceCount, 'голос', 'голоса', 'голосов')) : null) : null);
     return h('div', { class: 's-grid' }, left, aside(v));
   }
 
@@ -70,8 +82,24 @@
       h('div', { class: 's-delta' }, verdictTag(r.verdict),
         h('span', { class: 'pts', style: 'color:' + (r.gained > 0 ? 'var(--ok)' : r.gained < 0 ? 'var(--sev)' : 'var(--muted)') },
           signed(r.gained), h('small', null, plural(Math.abs(r.gained), 'очко', 'очка', 'очков')))),
-      h('p', { class: 's-reveal' }, r.revealText));
+      h('p', { class: 's-reveal' }, r.revealText),
+      r.audience ? audienceBars(v, r) : null);
     return h('div', { class: 's-grid' }, left, aside(v));
+  }
+
+  // Как проголосовал зал — подсказка для разбора: совпал ли он с ролями.
+  function audienceBars(v, r) {
+    const a = r.audience;
+    return h('div', { class: 's-aud' },
+      h('p', { class: 's-aud-title' }, 'Зал (' + a.total + ' ' + plural(a.total, 'голос', 'голоса', 'голосов') + ') выбрал бы:'),
+      v.step.options.map((o, i) => {
+        const pct = Math.round(a.counts[o.id] / a.total * 100);
+        return h('div', { class: 's-aud-row' + (o.id === r.optionId ? ' chosen' : '') },
+          h('span', { class: 'num-badge' }, i + 1),
+          h('span', { class: 's-aud-label' }, o.label),
+          h('span', { class: 's-aud-pct' }, pct + '%'),
+          h('span', { class: 's-aud-track' }, h('span', { class: 's-aud-fill', style: 'width:' + pct + '%' })));
+      }));
   }
 
   function finalView(v) {
@@ -107,18 +135,37 @@
     fills.forEach((f, i) => { const to = f.style.width; f.style.transition = 'none'; f.style.width = from[i] + '%'; f.getBoundingClientRect(); f.style.transition = ''; f.style.width = to; });
   }
 
+  // Сигнал конца фазы: один раз, когда таймер доходит до нуля (если ведущий включил звук).
+  function soundTick() {
+    const v = last;
+    if (!v || !v.sound || !v.phaseSec || !v.phaseAt || beeped === v.phaseAt) return;
+    if (UI.serverNow() >= v.phaseAt + v.phaseSec * 1000) { beeped = v.phaseAt; UI.beep(); }
+  }
+  function soundHint(v) {
+    if (!v.sound || UI.soundReady()) return null;
+    return h('p', { class: 's-sound' }, 'Звук включён ведущим: щёлкните по этому экрану, чтобы браузер разрешил сигнал.');
+  }
+
   function render(v) {
+    // Фаза, таймер которой уже истёк при подключении, не пищит задним числом.
+    // Так же — если звук включили, когда таймер уже истёк.
+    if (!last || last.phaseAt !== v.phaseAt || (!last.sound && v.sound)) beeped = v.phaseSec && UI.serverNow() >= v.phaseAt + v.phaseSec * 1000 ? v.phaseAt : null;
+    last = v;
     const body = v.phase === 'lobby' ? lobby(v) : v.phase === 'end' ? finalView(v) : v.phase === 'revealed' ? revealView(v) : stepView(v);
-    mount('screenBody', bar(v), body);
+    mount('screenBody', bar(v), soundHint(v), body);
     animateMeters(v);
   }
 
   function start() {
     document.title = 'Проектор — инцидент-тренировка';
-    fetch('/api/info').then(r => r.json()).then(i => { playUrls = i.playUrls || []; }).catch(() => {});
+    fetch(UI.api('/api/info')).then(r => r.json()).then(i => { playUrls = i.playUrls || []; publicUrl = !!i.publicUrl; if (last) render(last); }).catch(() => {});
+    setInterval(soundTick, 500);
+    const unlock = () => { UI.unlockSound(); setTimeout(() => last && render(last), 100); };
+    document.addEventListener('click', unlock);
     UI.connect({ view: 'screen' }, render);
     document.addEventListener('keydown', e => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      UI.unlockSound();
       if (e.code === 'KeyT') UI.toggleTheme();
       if (e.code === 'KeyF') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }
     });

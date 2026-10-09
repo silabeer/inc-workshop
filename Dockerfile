@@ -1,7 +1,7 @@
 # Без зависимостей: только рантайм Node и файлы приложения.
 FROM node:22-alpine
 WORKDIR /app
-COPY server.js workshop-engine.js index.html theme.css ./
+COPY server.js workshop-engine.js analytics.js index.html theme.css ./
 COPY ui ./ui
 COPY fonts ./fonts
 COPY scenarios ./scenarios

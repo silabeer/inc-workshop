@@ -15,6 +15,10 @@ const CASES = [
     facts: ['12:00:00', 'SSL_do_handshake() failed', '/etc/nginx/tls/old.pem', 'jackson 2.15 → 2.16', '68% трафика',
       'ACME-секрет не найден после миграции', 'дежурный отключил cron «до разборки»', '7,4%', 'v1.9.2', 'renew-certs.sh'],
   },
+  // Новые кейсы без отдельного документа ведущего: фактура живёт только в паке.
+  { file: 'disk-full.js' },
+  { file: 'dns-ttl.js' },
+  { file: 'retry-cascade.js' },
 ];
 
 // Проходит кейс, выбирая вариант функцией pick(step); ведущий раскрывает выбор явно.
@@ -56,7 +60,7 @@ for (const c of CASES) {
     assert.ok(s.metrics.money > pack.meta.moneyLimit, 'плохая игра должна пробивать лимит потерь');
   });
 
-  test(`${id}: ключевые факты совпадают с markdown-документом`, () => {
+  if (c.doc) test(`${id}: ключевые факты совпадают с markdown-документом`, () => {
     const packText = norm(fs.readFileSync(path.join(ROOT, 'scenarios', c.file), 'utf8'));
     const docText = norm(fs.readFileSync(path.join(ROOT, c.doc), 'utf8'));
     for (const f of c.facts) {
@@ -73,3 +77,18 @@ for (const c of CASES) {
     }
   });
 }
+
+test('в scenarios/ нет паков вне списка CASES — каждый кейс проходит проверки выше', () => {
+  const files = fs.readdirSync(path.join(ROOT, 'scenarios')).filter(f => f.endsWith('.js')).sort();
+  assert.deepEqual(files, CASES.map(c => c.file).sort());
+});
+
+test('тексты для проектора читаются с 10 м: ситуация до 450 знаков, вариант до 90', () => {
+  for (const c of CASES) {
+    const pack = require(path.join(ROOT, 'scenarios', c.file));
+    for (const st of pack.steps) {
+      assert.ok(st.brief.length <= 450, `${pack.meta.id}/${st.id}: brief ${st.brief.length} знаков`);
+      for (const o of st.options) assert.ok(o.label.length <= 90, `${pack.meta.id}/${st.id}/${o.id}: label ${o.label.length} знаков`);
+    }
+  }
+});

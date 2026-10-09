@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Инцидент-тренировка</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230F1E33'/%3E%3Crect x='6' y='18' width='5' height='8' fill='%23FFD84D'/%3E%3Crect x='13.5' y='12' width='5' height='14' fill='%23FFD84D'/%3E%3Crect x='21' y='6' width='5' height='20' fill='%23C8102E'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="fonts/fonts.css">
-<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="/theme.css">
 <style>
   /* Токены цветов и шрифтов — theme.css. Правила — .claude/skills/inc-workshop-ui/SKILL.md. */
   * { box-sizing: border-box; }
@@ -110,7 +110,7 @@
   .s-lobby h1 { font-size: 3.4rem; letter-spacing: -.01em; }
   .s-lobby .lead { font-size: 1.35rem; color: var(--muted); margin-top: .6rem; max-width: 46ch; }
   .s-join { margin-top: 1.4rem; }
-  .s-join .url { font-family: var(--mono); font-weight: 600; font-size: 1.6rem; overflow-wrap: anywhere; }
+  .s-join .url { font-family: var(--mono); font-weight: 600; font-size: 1.2rem; overflow-wrap: anywhere; }
   .seats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .45rem; }
   .seats li { display: flex; justify-content: space-between; gap: 1rem; font-size: 1.2rem; padding: .35rem 0; border-bottom: 1px solid var(--rule); }
   .seats .free { color: var(--muted); }
@@ -219,8 +219,42 @@
     pre.data { border-color: #999; }
   }
 
+
+  /* QR, голос зала, звук, настройки, аналитика */
+  .s-join { display: flex; gap: 1.4rem; align-items: center; }
+  .s-qr { flex: none; width: 11rem; }
+  .s-qr svg.qr { width: 100%; height: auto; display: block; border-radius: 6px; }
+  .s-aud-count { font-family: var(--cond); font-weight: 600; color: var(--muted); margin-left: .6rem; }
+  .s-aud { margin-top: 1rem; max-width: 34rem; }
+  .s-aud-title { font-family: var(--cond); font-weight: 600; color: var(--muted); margin-bottom: .35rem; }
+  .s-aud-row { display: grid; grid-template-columns: auto 1fr 3.2rem; gap: .1rem .6rem; align-items: center; margin-bottom: .35rem; font-size: .9rem; }
+  .s-aud-row .num-badge { grid-column: 1; grid-row: 1 / span 2; font-size: .8rem; }
+  .s-aud-label { grid-column: 2; grid-row: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .s-aud-track { grid-column: 2; grid-row: 2; height: .5rem; background: var(--idle-bg); border-radius: 4px; overflow: hidden; position: relative; }
+  .s-aud-pct { grid-column: 3; grid-row: 1 / span 2; font-family: var(--cond); font-weight: 700; text-align: right; }
+  .s-aud-fill { position: absolute; inset: 0 auto 0 0; background: var(--info); }
+  .s-aud-row.chosen .s-aud-fill { background: var(--ink); }
+  .s-aud-row.chosen .num-badge { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .s-sound { margin-top: .6rem; padding: .4rem .7rem; border-radius: 6px; background: var(--info-bg); color: var(--ink); font-size: .9rem; }
+  .p-code { width: 100%; min-height: 48px; font-size: 1.4rem; letter-spacing: .15em; text-align: center; border: 2px solid var(--rule); border-radius: 6px; background: var(--sheet); margin-top: .6rem; }
+  .g-inline { display: flex; gap: .5rem; align-items: center; margin-top: .3rem; }
+  .g-inline input { margin-top: 0; flex: 1; min-width: 0; }
+  .g-check { display: flex; gap: .5rem; align-items: center; font-family: var(--sans); font-weight: 400; }
+  .g-check input { width: 1.3rem; height: 1.3rem; margin: 0; min-height: 0; }
+  #stats .wrap { max-width: 1200px; margin: 0 auto; padding: 1.2rem 1.4rem 2rem; }
+  #stats h1 { font-size: 2.2rem; }
+  .st-case { margin-top: 1.2rem; }
+  .st-case h2 { font-size: 1.6rem; }
+  .st-case h3 { font-size: 1.05rem; color: var(--muted); font-weight: 600; margin-bottom: .4rem; }
+  .st-case ol { margin: 0; padding-left: 1.3rem; }
+  .st-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .92rem; }
+  .st-table th, .st-table td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--rule); }
+  .st-table th { font-family: var(--cond); font-weight: 600; color: var(--muted); }
+  .st-table td:not(:first-child), .st-table th:not(:first-child) { text-align: right; white-space: nowrap; }
+
   @media (max-width: 1000px) {
     .s-grid, .s-lobby, .s-final-head, .g-grid { grid-template-columns: 1fr; }
+    .s-join { flex-direction: column; align-items: flex-start; }
   }
   @media (max-width: 640px) {
     #gm .wrap { padding: .8rem 1rem 2rem; }
@@ -240,16 +274,20 @@
 <!-- Пульт ведущего: полная картина и управление раундом. -->
 <section id="gm" class="view"><div class="wrap" id="gmBody"></div></section>
 
+<!-- Аналитика по архиву (только ведущему). -->
+<section id="stats" class="view"><div class="wrap" id="statsBody"></div></section>
+
 <!-- Карточки ролей для бумажного режима. -->
 <section id="cards" class="view"><div class="wrap" id="cardsBody"></div></section>
 
 <div class="banner hidden" id="banner" role="alert"></div>
 <div class="toast hidden" id="toast" role="status"></div>
 
-<script src="ui/common.js"></script>
-<script src="ui/screen.js"></script>
-<script src="ui/play.js"></script>
-<script src="ui/gm.js"></script>
-<script src="ui/app.js"></script>
+<script src="/ui/qr.js"></script>
+<script src="/ui/common.js"></script>
+<script src="/ui/screen.js"></script>
+<script src="/ui/play.js"></script>
+<script src="/ui/gm.js"></script>
+<script src="/ui/app.js"></script>
 </body>
 </html>

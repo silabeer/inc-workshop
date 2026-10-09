@@ -4,7 +4,7 @@
   const { h, mount, plural, signed, mmss, rub, PHASES, timer, verdictTag, store, post, toast, copy } = UI;
 
   let pin = store.get('incw-pin') || '';
-  let es = null, last = null;
+  let es = null, last = null, pending = null;
 
   async function send(type, extra) {
     const r = await post('/api/cmd', Object.assign({ type }, extra || {}), { 'x-gm-pin': pin });
@@ -22,7 +22,7 @@
       e.preventDefault();
       pin = input.value.trim();
       const r = await fetch('/api/auth', { headers: { 'x-gm-pin': pin } });
-      if (r.ok) { store.set('incw-pin', pin); open(); } else askPin('PIN не подошёл');
+      if (r.ok) { store.set('incw-pin', pin); open(); } else askPin(r.status === 429 ? 'Слишком много неверных попыток. Подождите 10 минут.' : 'PIN не подошёл');
     };
     mount('gmBody', h('form', { class: 'g-pin panel g-form', onsubmit: go },
       h('h2', null, 'Пульт ведущего'),
@@ -47,7 +47,10 @@
   }
 
   function seatsPanel(v) {
-    return h('div', { class: 'panel' }, h('h3', null, 'Роли: ' + v.seats.filter(s => s.taken).length + ' из 5 на местах'),
+    const taken = v.seats.filter(s => s.taken).length;
+    return h('div', { class: 'panel' }, h('h3', null, 'Роли: ' + taken + ' из 5 на местах'),
+      v.phase === 'lobby' && taken > 1 ? h('p', { class: 'g-actions', style: 'margin-bottom:.5rem' },
+        h('button', { class: 'btn small', onclick: () => confirmSend('Перетасовать роли между занятыми телефонами? Каждый игрок получит случайную роль.', 'shuffle') }, 'Перетасовать роли (жребий)')) : null,
       h('ul', { class: 'g-votes' }, v.seats.map(s => h('li', null, h('span', null, s.name),
         h('span', null, s.taken ? h('span', null, h('span', { style: 'color:var(--ok);font-weight:600;margin-right:.6rem' }, 'на месте'),
           h('button', { class: 'btn small', onclick: () => confirmSend('Освободить роль «' + s.name + '»? Телефон игрока вернётся к выбору роли.', 'release', { role: s.id }) }, 'Освободить'))
@@ -60,15 +63,48 @@
       h('div', { class: 'g-actions' },
         v.phase !== 'lobby' && v.phase !== 'end' ? h('button', { class: 'btn danger', onclick: () => confirmSend('Перейти к итогам досрочно? Оставшиеся шаги не будут сыграны.', 'finish') }, 'Перейти к итогам') : null,
         sel,
-        h('button', { class: 'btn danger', onclick: () => confirmSend('Начать новую партию? Текущая уйдёт в архив; команда и роли сохранятся.', 'reset', { scenarioId: sel.value }) }, 'Новая партия')));
+        h('button', { class: 'btn danger', onclick: () => confirmSend('Начать новую партию? Текущая уйдёт в архив; команда и роли сохранятся.', 'reset', { scenarioId: sel.value }) }, 'Новая партия'),
+        v.room !== 'main' ? h('button', { class: 'btn danger', onclick: async () => {
+          if (!confirm('Удалить комнату ' + v.room + '? Партия уйдёт в архив, телефоны отключатся.')) return;
+          const r = await post('/api/rooms', { action: 'delete', id: v.room }, { 'x-gm-pin': pin });
+          if (r.ok) location.href = '/#gm';
+        } }, 'Удалить комнату') : null));
   }
 
   function links(v) {
     return h('p', { class: 'g-links' },
-      h('a', { href: '/#screen', target: '_blank' }, 'Открыть проектор'),
-      h('a', { href: '/#cards', target: '_blank' }, 'Карточки ролей для печати'),
-      h('span', null, 'Телефоны: ' + location.host + '/#play'),
+      h('a', { href: UI.BASE + '#screen', target: '_blank' }, 'Открыть проектор'),
+      h('a', { href: UI.BASE + '#cards', target: '_blank' }, 'Карточки ролей для печати'),
+      h('a', { href: UI.BASE + '#stats', target: '_blank' }, 'Аналитика по архиву'),
+      h('span', null, 'Телефоны: ' + location.host + UI.BASE + '#play'),
       v.gmPin ? null : h('span', { class: 'note-warn' }, 'Пульт без PIN: защитите — GM_PIN=4821 npm start'));
+  }
+
+  /* ---------- Настройки партии и комнаты ---------- */
+  function settingsPanel(v) {
+    const codeInput = h('input', { value: v.joinCode || '', maxlength: 12, autocomplete: 'off', placeholder: 'без кода', 'aria-label': 'Код входа' });
+    return h('div', { class: 'panel g-form' }, h('h3', null, 'Настройки партии'),
+      h('label', null, 'Код входа для телефонов',
+        h('span', { class: 'g-inline' }, codeInput,
+          h('button', { class: 'btn small', onclick: () => send('joinCode', { code: codeInput.value }) }, 'Сохранить'))),
+      h('p', { class: 'muted' }, v.joinCode ? 'Роли и зрители вводят код ' + v.joinCode + '. Сообщайте его только участникам.' : 'Без кода роль может занять любой в сети. Для игры через интернет включите код.'),
+      h('label', { class: 'g-check' }, h('input', { type: 'checkbox', checked: v.sound, onchange: e => send('sound', { on: e.target.checked }) }),
+        ' Звуковой сигнал конца фазы на проекторе'));
+  }
+
+  function roomsPanel(v) {
+    const name = h('input', { maxlength: 32, autocomplete: 'off', placeholder: 'stol-2', 'aria-label': 'Имя новой комнаты' });
+    const create = async () => {
+      const r = await post('/api/rooms', { action: 'create', id: name.value, scenarioId: v.scenarioId }, { 'x-gm-pin': pin });
+      if (r.ok) toast('Комната ' + r.data.id + ' создана');
+    };
+    return h('div', { class: 'panel g-form' }, h('h3', null, 'Комнаты: параллельные столы'),
+      h('ul', { class: 'g-votes' }, v.rooms.map(r => h('li', null,
+        h('span', null, h('b', null, r.id === 'main' ? 'main (основная)' : r.id), r.id === v.room ? ' — вы здесь' : ''),
+        h('span', { class: 'muted' }, r.title + ' · ' + UI.PHASES[r.phase].toLowerCase() + ' · ' + r.seats + '/5 ',
+          r.id === v.room ? null : h('a', { href: (r.id === 'main' ? '/' : '/r/' + r.id + '/') + '#gm' }, 'пульт'))))),
+      h('span', { class: 'g-inline' }, name, h('button', { class: 'btn small', onclick: create }, 'Создать комнату')),
+      h('p', { class: 'muted' }, 'У каждой комнаты свой проектор, телефоны и пульт: адрес /r/<комната>/.'));
   }
 
   /* ---------- Лобби ---------- */
@@ -89,7 +125,7 @@
           h('button', { class: 'btn primary', onclick: () => { saveTeam(); send('start'); } }, 'Начать игру'),
           h('p', { class: 'muted' }, taken === 5 ? 'Все роли на местах.' : 'На местах ' + taken + ' из 5. Можно начинать и так: голоса пустых ролей вписываете вы (бумажный режим).')),
         links(v)),
-      h('div', { class: 'g-col' }, seatsPanel(v), dangerZone(v)));
+      h('div', { class: 'g-col' }, seatsPanel(v), settingsPanel(v), roomsPanel(v), dangerZone(v)));
   }
 
   /* ---------- Раунд ---------- */
@@ -106,8 +142,10 @@
       const byRole = v.seats.filter(s => v.votes[s.id]).map(s => s.name.split(' ')[0] + ' — ' + (v.step.options.findIndex(o => o.id === v.votes[s.id]) + 1));
       const tieNote = t.tie && !t.winner ? h('p', { class: 'note-warn' }, 'Ничья. Командир называет вариант — выберите его в списке ниже.')
         : t.tie ? h('p', null, 'Ничья — решает голос Командира: вариант ' + (v.step.options.findIndex(o => o.id === t.winner) + 1) + '.') : null;
+      const a = v.audience;
       return [
         h('p', { class: 'g-tally' }, t.total + '/5' + (byRole.length ? ': ' + byRole.join(', ') : ': голосов пока нет')),
+        a && a.total ? h('p', { class: 'muted' }, 'Зал (' + a.total + '): ' + v.step.options.map((o, i) => (i + 1) + ' — ' + Math.round(a.counts[o.id] / a.total * 100) + '%').join(', ') + '. На решение не влияет.') : null,
         tieNote,
         h('div', { class: 'g-actions' },
           h('button', { class: 'btn primary', disabled: !t.winner, onclick: () => send('reveal') }, 'Раскрыть последствия'),
@@ -182,7 +220,9 @@
       h('div', { class: 'g-col' },
         h('div', { class: 'panel' }, h('h2', null, s ? s.grade.label : 'Итоги'),
           s ? h('p', { style: 'margin-top:.4rem' }, 'Очки ' + s.score + ' из ' + s.max + ' · лучших решений ' + s.best + ' из ' + s.steps.length + ' · ловушки ' + s.traps + ' · потери ' + rub(s.metrics.money) + ' · TTR ' + s.metrics.ttrMin + ' мин · игра ' + mmss(s.totalSec)) : null,
-          h('div', { class: 'g-actions', style: 'margin-top:.8rem' }, h('button', { class: 'btn primary', onclick: () => copy(v.report) }, 'Скопировать итоги'))),
+          s && s.audienceSplit ? h('p', { class: 'muted', style: 'margin-top:.4rem' }, 'Зал не согласился с ролями на ' + s.audienceSplit + ' шаг(ах) — подробности в отчёте.') : null,
+          h('div', { class: 'g-actions', style: 'margin-top:.8rem' }, h('button', { class: 'btn primary', onclick: () => copy(v.report) }, 'Скопировать итоги'),
+            h('a', { class: 'btn', href: UI.BASE + '#stats', target: '_blank' }, 'Аналитика по архиву'))),
         s ? h('div', { class: 'panel g-final' }, h('h3', null, 'Разбор: долгие шаги первыми'),
           h('ol', null, s.steps.slice().sort((a, b) => b.sec - a.sec).map(x => h('li', null, h('b', null, x.title), ' — ' + mmss(x.sec) + '. ' + x.label + ' (' + x.verdict.label.toLowerCase() + ')' + (x.isBest ? '' : '. Лучше: ' + x.bestLabel))))) : null),
       h('div', { class: 'g-col' },
@@ -195,13 +235,23 @@
     const body = v.phase === 'lobby' ? lobby(v) : v.phase === 'end' ? finalView(v) : stepView(v);
     // Не перерисовываем, пока ведущий печатает название команды: иначе ввод собьётся.
     const a = document.activeElement;
-    if (a && a.tagName === 'INPUT' && document.getElementById('gm').contains(a) && v.phase === 'lobby') return;
+    if (a && a.tagName === 'INPUT' && a.type !== 'checkbox' && a.value !== a.defaultValue && document.getElementById('gm').contains(a)) { pending = v; last = v; return; }
     mount('gmBody', bar(v), body);
   }
 
+  // Отложенная перерисовка, если обновление пришло, пока ведущий печатал.
+  document.addEventListener('focusout', () => { if (pending) { const v = pending; pending = null; setTimeout(() => render(last), 300); } }); // пауза: клик по кнопке рядом с полем успевает сработать; рисуем самое свежее
+
   function open() {
     if (es) es.close();
-    es = UI.connect({ view: 'gm', pin }, render);
+    // Поток закрыт сервером: PIN сменили (спросим заново) или комнату удалили (уходим на основную).
+    es = UI.connect({ view: 'gm', pin }, render, async () => {
+      const a = await fetch('/api/auth', { headers: { 'x-gm-pin': pin } }).catch(() => null);
+      if (a && (a.status === 401 || a.status === 429)) return askPin(a.status === 429 ? 'Слишком много неверных попыток. Подождите 10 минут.' : 'PIN сменился — введите новый');
+      const i = await fetch(UI.api('/api/info')).catch(() => null);
+      if (i && i.status === 404) { location.href = '/#gm'; return; }
+      setTimeout(open, 3000);
+    });
   }
 
   async function start() {
@@ -217,7 +267,7 @@
   /* ---------- Карточки ролей для бумажного режима ---------- */
   async function cards() {
     document.title = 'Карточки ролей — инцидент-тренировка';
-    const r = await fetch('/api/pack', { headers: { 'x-gm-pin': pin } });
+    const r = await fetch(UI.api('/api/pack'), { headers: { 'x-gm-pin': pin } });
     if (!r.ok) { mount('cardsBody', h('p', { class: 'panel' }, 'Откройте сначала пульт ведущего (#gm) и введите PIN — карточки доступны только ведущему.')); return; }
     const p = await r.json();
     mount('cardsBody',
@@ -233,5 +283,32 @@
       ]));
   }
 
-  window.GM = { start, cards };
+  /* ---------- Аналитика по архиву ---------- */
+  const pct = x => (x === null ? '—' : Math.round(x * 100) + '%');
+  async function stats() {
+    document.title = 'Аналитика — инцидент-тренировка';
+    const r = await fetch('/api/analytics', { headers: { 'x-gm-pin': pin } });
+    if (!r.ok) { mount('statsBody', h('p', { class: 'panel' }, 'Откройте сначала пульт ведущего (#gm) и введите PIN — аналитика доступна только ведущему.')); return; }
+    const data = await r.json();
+    if (!data.length) { mount('statsBody', h('h1', null, 'Аналитика по архиву'), h('p', { class: 'panel', style: 'margin-top:1rem' }, 'В архиве пока нет сыгранных партий. Партия попадает в архив, когда доходит до итогов или когда ведущий начинает новую.')); return; }
+    mount('statsBody', h('h1', null, 'Аналитика по архиву'),
+      data.map(c => h('section', { class: 'panel st-case' },
+        h('h2', null, c.title),
+        h('div', { class: 'metrics', style: 'margin:.6rem 0 1rem' },
+          [[c.games + (c.completed !== c.games ? ' (' + c.completed + ' до конца)' : ''), 'партий'], [c.avgScore + ' / ' + c.maxScore, 'средний счёт'],
+            [rub(c.avgMoney), 'средние потери'], [c.avgTtrMin + '\u00a0мин', 'средний TTR'], [mmss(c.avgGameSec), 'средняя игра']]
+            .map(([b, t]) => h('div', { class: 'metric' }, h('b', null, b), h('span', null, t)))),
+        h('div', { class: 'g-grid', style: 'margin-top:0' },
+          h('div', null, h('h3', null, 'Чаще всего срабатывают ловушки'),
+            c.topTraps.length ? h('ol', null, c.topTraps.map(t => h('li', null, h('b', null, t.label), ' — ' + t.stepTitle + ': ' + pct(t.rate) + ' партий'))) : h('p', { class: 'muted' }, 'Ловушки не выбирали.')),
+          h('div', null, h('h3', null, 'Дольше всего думают'),
+            h('ol', null, c.slowSteps.map(t => h('li', null, h('b', null, t.title), ' — ' + mmss(t.avgSec) + ' в среднем'))))),
+        h('table', { class: 'st-table' },
+          h('thead', null, h('tr', null, ['Шаг', 'Сыграно', 'Лучший ход', 'Ловушка', 'Время', 'Зал совпал с ролями'].map(t => h('th', null, t)))),
+          h('tbody', null, c.steps.map(st => h('tr', null,
+            h('td', null, st.title), h('td', null, String(st.played)), h('td', null, pct(st.bestRate)), h('td', null, pct(st.trapRate)),
+            h('td', null, st.avgSec === null ? '—' : mmss(st.avgSec)), h('td', null, st.audienceGames ? pct(st.audienceAgreeRate) : '—'))))))));
+  }
+
+  window.GM = { start, cards, stats };
 })();
