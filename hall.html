@@ -26,7 +26,8 @@
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  html { font-size: clamp(15px, 1.12vw + 4px, 24px); }
+  /* Кегль зависит и от ширины, и от высоты: на проекторе 1280×720 всё должно влезать без прокрутки. */
+  html { font-size: clamp(14px, min(1.12vw + 4px, 1.9vh + 3px), 24px); }
   body {
     margin: 0; background: var(--paper); color: var(--ink);
     font-family: var(--sans); line-height: 1.45; -webkit-font-smoothing: antialiased;
@@ -37,49 +38,52 @@
   .hidden { display: none !important; }
   .screen { display: none; min-height: 100vh; }
   .screen.on { display: block; }
-  .wrap { max-width: 1500px; margin: 0 auto; padding: 1.6rem 2rem 2rem; }
+  .wrap { max-width: 1500px; margin: 0 auto; padding: 1.4rem 2rem 1.6rem; }
   h1, h2, h3 { font-family: var(--cond); font-weight: 700; line-height: 1.08; margin: 0; text-wrap: balance; }
   .muted { color: var(--muted); }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: .6rem;
     border: 2px solid var(--ink); background: transparent; border-radius: 6px;
-    padding: .7rem 1.4rem; font-family: var(--cond); font-weight: 600; font-size: 1.15rem; cursor: pointer;
+    padding: .65rem 1.3rem; font-family: var(--cond); font-weight: 600; font-size: 1.15rem; cursor: pointer;
   }
   .btn.primary { background: var(--ink); color: var(--paper); }
   .btn:hover { background: var(--ink); color: var(--paper); }
   .btn:disabled { opacity: .35; cursor: not-allowed; background: transparent; color: var(--ink); }
+  .btn.ghost { border-color: transparent; color: var(--muted); padding-left: .6rem; padding-right: .6rem; }
+  .btn.ghost:hover { background: transparent; color: var(--ink); text-decoration: underline; }
   .kbd {
     display: inline-block; min-width: 1.6em; padding: 0 .35em; border: 1.5px solid currentColor; border-bottom-width: 3px;
     border-radius: 4px; font-family: var(--cond); font-weight: 600; font-size: .8em; text-align: center; line-height: 1.4;
   }
 
   /* ---------- Лобби ---------- */
-  .lobby-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 2rem; flex-wrap: wrap; margin-bottom: 1.6rem; }
-  .lobby-head h1 { font-size: 3.4rem; letter-spacing: -.01em; }
-  .lobby-head p { margin: .5rem 0 0; max-width: 46ch; color: var(--muted); font-size: 1.1rem; }
-  .lobby-grid { display: grid; grid-template-columns: minmax(0, 1fr) 22rem; gap: 2rem; align-items: start; }
-  #cases { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 1.2rem; }
+  .lobby-head { margin-bottom: 1.3rem; }
+  .lobby-head h1 { font-size: 3.2rem; letter-spacing: -.01em; }
+  .lobby-head p { margin: .5rem 0 0; max-width: 52ch; color: var(--muted); font-size: 1.1rem; }
+  .lobby-grid { display: grid; grid-template-columns: minmax(0, 1fr) 21rem; gap: 2rem; align-items: start; }
+  #cases { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 1.2rem; }
   .case {
     text-align: left; background: var(--sheet); border: 2px solid var(--rule); border-radius: 10px;
-    padding: 1.2rem 1.3rem 1rem; cursor: pointer; display: flex; flex-direction: column; gap: .5rem;
+    padding: 1.1rem 1.2rem .9rem; cursor: pointer; display: flex; flex-direction: column; gap: .5rem;
   }
   .case:hover { border-color: var(--muted); }
   .case[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
-  .case h3 { font-size: 1.6rem; }
+  .case h3 { font-size: 1.55rem; }
   .case .brief { margin: 0; color: var(--muted); }
   .case .meta { font-size: .85rem; color: var(--muted); display: flex; gap: 1rem; }
-  .case .picked { font-family: var(--cond); font-weight: 600; font-size: .9rem; }
+  .case .picked { font-family: var(--cond); font-weight: 600; font-size: .9rem; color: var(--ink); }
   .case[aria-pressed="false"] .picked { visibility: hidden; }
-  .side { background: var(--sheet); border: 2px solid var(--rule); border-radius: 10px; padding: 1.2rem 1.3rem; display: flex; flex-direction: column; gap: 1rem; }
+  .side { background: var(--sheet); border: 2px solid var(--rule); border-radius: 10px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .9rem; }
   .side label { font-family: var(--cond); font-weight: 600; font-size: 1rem; }
-  .side input { width: 100%; margin-top: .35rem; padding: .6rem .8rem; border: 2px solid var(--rule); border-radius: 6px; background: var(--paper); font-size: 1.1rem; }
+  .side input { width: 100%; margin-top: .35rem; padding: .55rem .8rem; border: 2px solid var(--rule); border-radius: 6px; background: var(--paper); font-size: 1.1rem; }
   .side input:focus { border-color: var(--ink); outline: none; }
-  .roles-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; font-size: .9rem; }
-  .roles-list b { font-family: var(--cond); font-weight: 600; font-size: 1rem; display: block; }
-  .roles-list span { color: var(--muted); }
   .side .btn { width: 100%; }
-  .foot { margin-top: 1.6rem; font-size: .85rem; color: var(--muted); display: flex; gap: 1.6rem; flex-wrap: wrap; }
+  .side h3 { font-size: 1.05rem; }
+  .roles-list { list-style: none; margin: .4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .45rem; font-size: .85rem; }
+  .roles-list b { font-family: var(--cond); font-weight: 600; font-size: .95rem; }
+  .roles-list span { color: var(--muted); }
+  .foot { margin-top: 1.4rem; font-size: .85rem; color: var(--muted); display: flex; gap: 1.6rem; flex-wrap: wrap; }
   .foot a { color: inherit; }
 
   /* ---------- Игра: шкала напряжения слева на всю высоту ---------- */
@@ -88,11 +92,13 @@
   .gauge .num { font-family: var(--cond); font-weight: 700; font-size: 1.35rem; line-height: 1; }
   .gauge .track { flex: 1; width: 1.1rem; background: var(--idle-bg); border-radius: 4px; position: relative; overflow: hidden; }
   .gauge .fill { position: absolute; left: 0; right: 0; bottom: 0; transition: height .6s cubic-bezier(.3,.7,.2,1), background .6s; }
+  /* Отметка стартового уровня: видно, стало ли лучше или хуже, чем в начале инцидента. */
+  .gauge .base { position: absolute; left: -2px; right: -2px; bottom: 50%; border-top: 2px dashed var(--ink); opacity: .55; }
   .gauge .cap { writing-mode: vertical-rl; transform: rotate(180deg); font-size: .78rem; color: var(--muted); font-family: var(--cond); font-weight: 600; }
   .t-low { background: var(--ok); } .t-mid { background: var(--warn); } .t-high { background: var(--sev); }
   .c-low { color: var(--ok); } .c-mid { color: var(--warn); } .c-high { color: var(--sev); }
 
-  .bar { display: flex; justify-content: space-between; align-items: baseline; gap: 1.5rem; flex-wrap: wrap; padding-bottom: .9rem; border-bottom: 2px solid var(--rule); }
+  .bar { display: flex; justify-content: space-between; align-items: baseline; gap: 1.5rem; flex-wrap: wrap; padding-bottom: .8rem; border-bottom: 2px solid var(--rule); }
   .bar .case-title { font-family: var(--cond); font-weight: 600; font-size: 1.1rem; }
   .bar .step { color: var(--muted); margin-left: .8rem; }
   .score { display: flex; gap: 1.8rem; align-items: baseline; }
@@ -101,90 +107,122 @@
   .score .traps b { color: var(--sev); }
 
   /* Плашка «шаг ведёт» — жёлтая, как назначение на пейджере. Главный акцент экрана. */
-  .handoff { display: flex; align-items: stretch; margin: 1.3rem 0 1rem; border-radius: 6px; overflow: hidden; max-width: 100%; width: fit-content; }
-  .handoff .who { background: var(--tag); color: var(--tag-ink); padding: .5rem 1.1rem; font-family: var(--cond); font-weight: 700; font-size: 1.5rem; white-space: nowrap; }
+  .handoff { display: flex; align-items: stretch; margin: 1.1rem 0 .9rem; border-radius: 6px; overflow: hidden; max-width: 100%; width: fit-content; }
+  .handoff .who { background: var(--tag); color: var(--tag-ink); padding: .45rem 1.1rem; font-family: var(--cond); font-weight: 700; font-size: 1.5rem; white-space: nowrap; display: flex; align-items: center; }
   .handoff .who small { font-weight: 500; font-size: .95rem; margin-right: .5rem; }
-  .handoff .task { background: var(--sheet); border: 2px solid var(--tag); border-left: 0; padding: .5rem 1rem; font-size: 1rem; display: flex; align-items: center; max-width: 60ch; }
-  .node-title { font-size: 2.7rem; margin-bottom: 1rem; }
+  .handoff .task { background: var(--sheet); border: 2px solid var(--tag); border-left: 0; padding: .45rem 1rem; font-size: 1rem; display: flex; align-items: center; max-width: 60ch; }
+  .node-title { font-size: 2.6rem; margin-bottom: .9rem; }
   .play { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.6rem; align-items: start; }
-  .situation { font-size: 1.3rem; line-height: 1.5; max-width: 62ch; margin: 0 0 1.3rem; white-space: pre-wrap; }
-  #choices { display: flex; flex-direction: column; gap: .7rem; }
+  .situation { font-size: 1.3rem; line-height: 1.5; max-width: 62ch; margin: 0 0 1.1rem; white-space: pre-wrap; }
+  #choices { display: flex; flex-direction: column; gap: .6rem; }
   .choice {
     display: grid; grid-template-columns: 2.4rem 1fr; gap: 1rem; align-items: center; text-align: left;
-    background: var(--sheet); border: 2px solid var(--rule); border-radius: 8px; padding: .8rem 1.1rem; cursor: pointer; font-size: 1.25rem;
+    background: var(--sheet); border: 2px solid var(--rule); border-radius: 8px; padding: .7rem 1.1rem; cursor: pointer; font-size: 1.25rem;
   }
   .choice:hover { border-color: var(--ink); }
   .choice .kbd { font-size: 1.15rem; justify-self: center; }
   .aside { display: flex; flex-direction: column; gap: 1rem; position: sticky; top: 1rem; }
   .panel { background: var(--sheet); border: 2px solid var(--rule); border-radius: 10px; padding: .9rem 1rem; }
   .panel h3 { font-size: 1rem; font-weight: 600; color: var(--muted); margin-bottom: .4rem; }
-  .say { font-size: 1rem; }
-  .hotkeys { font-size: .8rem; color: var(--muted); display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: 1.4rem; }
+  .hotkeys { font-size: .8rem; color: var(--muted); display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: 1.2rem; }
 
-  /* Диаграмма */
+  /* Диаграмма: подписи крупные, чтобы читались с задних рядов; компонент шага подсвечен. */
   svg.diag { width: 100%; height: auto; display: block; }
   .d-box { stroke-width: 2; }
   .d-box.c-red { fill: var(--sev-bg); stroke: var(--sev); }
   .d-box.c-yellow { fill: var(--warn-bg); stroke: var(--warn); }
   .d-box.c-green { fill: var(--ok-bg); stroke: var(--ok); }
   .d-box.c-gray { fill: var(--idle-bg); stroke: var(--rule); }
-  .d-label { fill: var(--ink); font: 600 13px var(--cond); text-anchor: middle; }
-  .d-note { fill: var(--muted); font: 11px var(--sans); text-anchor: middle; }
-  .d-edge { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+  .d-label { fill: var(--ink); font: 600 17px var(--cond); text-anchor: middle; }
+  .d-note { fill: var(--muted); font: 13px var(--sans); text-anchor: middle; }
+  .d-edge { stroke: var(--muted); stroke-width: 1.8; fill: none; }
   .d-arrow { fill: var(--muted); }
-  .d-elabel { fill: var(--muted); font: 11px var(--sans); text-anchor: middle; paint-order: stroke; stroke: var(--sheet); stroke-width: 4px; }
-  .legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .75rem; color: var(--muted); margin-top: .4rem; }
+  .d-elabel { fill: var(--muted); font: 13px var(--sans); text-anchor: middle; paint-order: stroke; stroke: var(--sheet); stroke-width: 4px; }
+  svg.has-focus .d-node { opacity: .45; }
+  svg.has-focus .d-node.focus { opacity: 1; }
+  .d-node.focus .d-box { stroke: var(--ink); stroke-width: 3.5; }
+  .legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .85rem; color: var(--muted); margin-top: .5rem; }
   .legend i { display: inline-block; width: .8em; height: .8em; border-radius: 2px; margin-right: .3em; vertical-align: -.05em; border: 2px solid; }
 
   /* ---------- Последствия ---------- */
-  .verdict { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(16rem, 1fr); gap: 2rem; margin-top: 1.6rem; align-items: start; }
+  .context { color: var(--muted); font-family: var(--cond); font-weight: 600; font-size: 1.05rem; margin-top: 1.1rem; }
+  .verdict { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(16rem, 1fr); gap: 2rem; margin-top: .8rem; align-items: start; }
   .picked-label { color: var(--muted); font-size: 1.05rem; margin-bottom: .5rem; }
   .picked-label b { color: var(--ink); font-weight: 600; }
-  .outcome-text { font-size: 1.55rem; line-height: 1.45; max-width: 52ch; margin: 0; }
-  .delta { background: var(--sheet); border: 2px solid var(--rule); border-radius: 10px; padding: 1.2rem 1.3rem; }
-  .delta .tag { display: inline-block; font-family: var(--cond); font-weight: 700; font-size: 1.15rem; padding: .2rem .7rem; border-radius: 4px; }
+  .outcome-text { font-size: 1.5rem; line-height: 1.45; max-width: 52ch; margin: 0; }
+  .delta { background: var(--sheet); border: 2px solid var(--rule); border-radius: 10px; padding: 1.1rem 1.2rem; margin-bottom: 1rem; display: grid; grid-template-columns: auto 1fr; gap: .2rem 1.2rem; align-items: center; }
+  .delta .tag { grid-column: 1 / -1; justify-self: start; font-family: var(--cond); font-weight: 700; font-size: 1.15rem; padding: .2rem .7rem; border-radius: 4px; }
   .tag.best { background: var(--ok-bg); color: var(--ok); }
   .tag.ok { background: var(--warn-bg); color: var(--warn); }
   .tag.weak { background: var(--idle-bg); color: var(--muted); }
   .tag.trap { background: var(--sev); color: #fff; }
-  .delta .pts { font-family: var(--cond); font-weight: 700; font-size: 4.2rem; line-height: 1; margin: .6rem 0 .2rem; }
-  .delta .pts .unit { font-size: 1.3rem; font-weight: 600; margin-left: .5rem; color: var(--muted); }
-  .delta .tens { font-size: 1.05rem; color: var(--muted); }
+  .delta .pts { font-family: var(--cond); font-weight: 700; font-size: 3.6rem; line-height: 1; margin-top: .4rem; }
+  .delta .pts .unit { font-size: 1.3rem; font-weight: 600; margin-left: .4rem; color: var(--muted); }
+  .delta .tens { font-size: 1.05rem; color: var(--muted); align-self: end; padding-bottom: .4rem; }
   .debrief { margin-top: 1rem; font-size: 1rem; border-left: 4px solid var(--rule); padding: .1rem 0 .1rem .9rem; max-width: 62ch; }
   .debrief b { font-family: var(--cond); font-weight: 600; }
-  .actions { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: 1.6rem; }
+  .actions { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: 1.4rem; align-items: center; }
 
   /* ---------- Финал ---------- */
-  .final-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2rem; align-items: end; padding-bottom: 1.2rem; border-bottom: 2px solid var(--rule); }
-  .final-head h1 { font-size: 3.8rem; }
-  .final-head p { margin: .6rem 0 0; font-size: 1.2rem; max-width: 56ch; color: var(--muted); }
+  .final-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2rem; align-items: end; padding-bottom: 1.1rem; border-bottom: 2px solid var(--rule); }
+  .final-head h1 { font-size: 3.6rem; }
+  .final-head p { margin: .6rem 0 0; font-size: 1.15rem; max-width: 56ch; color: var(--muted); }
   .grade-great h1 { color: var(--ok); } .grade-good h1 { color: var(--ink); } .grade-shaky h1 { color: var(--warn); } .grade-bad h1 { color: var(--sev); }
-  .metrics { display: flex; gap: 2.2rem; flex-wrap: wrap; }
+  .metrics { display: flex; gap: 2rem; flex-wrap: wrap; }
   .metric { font-family: var(--cond); }
-  .metric b { display: block; font-size: 2.6rem; font-weight: 700; line-height: 1; }
+  .metric b { display: block; font-size: 2.5rem; font-weight: 700; line-height: 1; }
   .metric span { color: var(--muted); font-weight: 600; }
-  .final-body { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 2rem; margin-top: 1.4rem; align-items: start; }
+  .final-body { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 2rem; margin-top: 1.3rem; align-items: start; }
   .recap { list-style: none; margin: 0; padding: 0; counter-reset: s; }
-  .recap li { counter-increment: s; display: grid; grid-template-columns: 2rem 1fr auto; gap: .2rem .9rem; padding: .6rem 0; border-bottom: 1px solid var(--rule); }
+  .recap li { counter-increment: s; display: grid; grid-template-columns: 2rem 1fr auto; gap: .2rem .9rem; padding: .55rem 0; border-bottom: 1px solid var(--rule); }
   .recap li::before { content: counter(s); font-family: var(--cond); font-weight: 700; font-size: 1.2rem; color: var(--muted); }
   .recap .r-title { font-family: var(--cond); font-weight: 600; font-size: 1.1rem; }
   .recap .r-role { color: var(--muted); font-size: .85rem; margin-left: .4rem; font-weight: 400; font-family: var(--sans); }
   .recap .r-pick { grid-column: 2; font-size: .95rem; }
   .recap .r-better { grid-column: 2; font-size: .85rem; color: var(--muted); }
-  .recap .r-pts { grid-row: 1 / span 2; grid-column: 3; font-family: var(--cond); font-weight: 700; font-size: 1.3rem; align-self: center; }
+  .recap .r-pts { grid-row: 1 / span 2; grid-column: 3; font-family: var(--cond); font-weight: 700; font-size: 1.3rem; align-self: center; text-align: right; }
+  .recap .r-pts small { display: block; font-size: .75rem; font-weight: 500; color: var(--muted); }
   .recap .trap .r-pick::after { content: " — ловушка"; color: var(--sev); font-weight: 600; }
   .end-text { font-size: 1.1rem; line-height: 1.55; white-space: pre-wrap; margin: 0; }
+
+  /* ---------- Экран ведущего (второе окно на ноутбуке) ---------- */
+  #presenter .wrap { max-width: 1100px; }
+  .p-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: baseline; border-bottom: 2px solid var(--rule); padding-bottom: .6rem; }
+  .p-head h1 { font-size: 1.6rem; }
+  .p-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+  .p-grid .panel p { margin: 0; }
+  .p-choices { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; }
+  .p-choice { display: grid; grid-template-columns: 2rem 1fr auto; gap: .2rem .8rem; text-align: left; background: var(--sheet); border: 2px solid var(--rule); border-radius: 8px; padding: .55rem .8rem; cursor: pointer; font-size: .95rem; }
+  .p-choice:hover { border-color: var(--ink); }
+  .p-choice .p-hint { grid-column: 2 / -1; color: var(--muted); font-size: .85rem; }
+  .p-choice .p-score { font-family: var(--cond); font-weight: 700; }
+  .p-choice.picked { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+  .p-note { color: var(--muted); font-size: .9rem; margin-top: 1rem; }
 
   /* Подсказки поверх */
   .toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: .7rem 1.2rem; border-radius: 6px; font-size: 1rem; z-index: 20; }
   .help { position: fixed; inset: 0; background: rgba(15, 30, 51, .55); display: flex; align-items: center; justify-content: center; z-index: 30; padding: 1rem; }
-  .help .panel { max-width: 34rem; width: 100%; padding: 1.4rem 1.6rem; }
+  .help .panel { max-width: 36rem; width: 100%; padding: 1.4rem 1.6rem; }
   .help dl { display: grid; grid-template-columns: auto 1fr; gap: .6rem 1.2rem; margin: .8rem 0 0; }
   .help dt { text-align: right; }
   .help dd { margin: 0; }
 
+  /* Низкие экраны (проекторы 1280×720): плотнее, чтобы варианты не уходили под сгиб. */
+  @media (max-height: 820px) and (min-width: 641px) {
+    .wrap { padding-top: 1rem; padding-bottom: 1rem; }
+    .handoff { margin: .8rem 0 .6rem; }
+    .handoff .who { font-size: 1.3rem; }
+    .node-title { font-size: 2rem; margin-bottom: .6rem; }
+    .situation { font-size: 1.22rem; margin-bottom: .8rem; }
+    .choice { padding: .55rem 1rem; font-size: 1.18rem; }
+    #choices { gap: .45rem; }
+    .lobby-head h1 { font-size: 2.6rem; }
+    .lobby-head { margin-bottom: .9rem; }
+    .outcome-text { font-size: 1.3rem; }
+    .hotkeys { display: none; }
+  }
   @media (max-width: 1000px) {
-    .lobby-grid, .play, .verdict, .final-body, .final-head { grid-template-columns: 1fr; }
+    .lobby-grid, .play, .verdict, .final-body, .final-head, .p-grid { grid-template-columns: 1fr; }
     .aside { position: static; }
     .node-title { font-size: 2rem; }
     .lobby-head h1 { font-size: 2.4rem; }
@@ -195,6 +233,7 @@
     .gauge { position: sticky; height: auto; flex-direction: row; padding: .5rem 1rem; border-right: 0; border-bottom: 2px solid var(--rule); z-index: 5; }
     .gauge .track { height: .8rem; width: auto; }
     .gauge .fill { top: 0; right: auto; height: 100% !important; width: var(--t); transition: width .6s; }
+    .gauge .base { bottom: -2px; top: -2px; left: 50%; right: auto; border-top: 0; border-left: 2px dashed var(--ink); }
     .gauge .cap { writing-mode: horizontal-tb; transform: none; }
     .handoff { flex-direction: column; width: 100%; }
     .handoff .who { white-space: normal; }
@@ -209,10 +248,8 @@
 <section id="lobby" class="screen on" aria-labelledby="lobbyTitle">
   <div class="wrap">
     <header class="lobby-head">
-      <div>
-        <h1 id="lobbyTitle">Инцидент-тренировка</h1>
-        <p>Зал играет одну команду дежурных. Каждый шаг ведёт назначенная роль: читает ситуацию вслух, собирает мнения и называет решение.</p>
-      </div>
+      <h1 id="lobbyTitle">Инцидент-тренировка</h1>
+      <p>Зал играет одну команду дежурных. Каждый шаг ведёт назначенная роль: читает ситуацию вслух, собирает мнения и называет решение.</p>
     </header>
     <div class="lobby-grid">
       <div id="cases" role="group" aria-label="Кейсы"></div>
@@ -221,11 +258,12 @@
           <label for="teamName">Название команды</label>
           <input id="teamName" value="Команда зала" maxlength="40" autocomplete="off">
         </div>
+        <button id="startBtn" class="btn primary">Начать кейс</button>
+        <button id="presenterBtn" class="btn">Экран ведущего <span class="kbd">P</span></button>
         <div>
-          <h3 style="font-size:1.05rem;margin-bottom:.5rem">Раздайте роли в зале</h3>
+          <h3>Раздайте роли в зале</h3>
           <ul class="roles-list" id="rolesList"></ul>
         </div>
-        <button id="startBtn" class="btn primary">Начать кейс</button>
       </aside>
     </div>
     <div class="foot">
@@ -242,7 +280,7 @@
   <div class="stage">
     <div class="gauge" aria-label="Напряжение инцидента">
       <div class="num" id="tensionNum">50</div>
-      <div class="track"><div class="fill" id="tensionFill"></div></div>
+      <div class="track"><div class="fill" id="tensionFill"></div><div class="base" title="уровень на старте"></div></div>
       <div class="cap">Напряжение</div>
     </div>
     <div class="wrap">
@@ -271,16 +309,13 @@
               <div id="diagramBox"></div>
               <div class="legend"><span><i style="border-color:var(--sev);background:var(--sev-bg)"></i>сбой</span><span><i style="border-color:var(--warn);background:var(--warn-bg)"></i>деградация</span><span><i style="border-color:var(--ok);background:var(--ok-bg)"></i>в норме</span><span><i style="border-color:var(--rule);background:var(--idle-bg)"></i>под вопросом</span></div>
             </div>
-            <div class="panel" id="sayPanel">
-              <h3>Ведущему</h3>
-              <div class="say" id="sayBox"></div>
-            </div>
           </div>
         </div>
         <div class="hotkeys"><span><span class="kbd">1</span>–<span class="kbd">4</span> выбрать</span><span><span class="kbd">?</span> клавиши</span></div>
       </div>
 
       <div id="outcomeView" class="hidden">
+        <div class="context" id="outcomeContext"></div>
         <div class="verdict">
           <div>
             <div class="picked-label">Решение: <b id="pickedLabel"></b></div>
@@ -288,13 +323,16 @@
             <div class="debrief" id="hintBox"></div>
             <div class="actions">
               <button id="nextBtn" class="btn primary">Дальше <span class="kbd">Enter</span></button>
-              <button id="undoBtn" class="btn">Отменить выбор <span class="kbd">⌫</span></button>
+              <button id="undoBtn" class="btn ghost">отменить выбор</button>
             </div>
           </div>
-          <div class="delta">
-            <span class="tag" id="verdictTag"></span>
-            <div class="pts" id="gainVal"></div>
-            <div class="tens" id="tensionDelta"></div>
+          <div>
+            <div class="delta">
+              <span class="tag" id="verdictTag"></span>
+              <div class="pts" id="gainVal"></div>
+              <div class="tens" id="tensionDelta"></div>
+            </div>
+            <div class="panel" id="outcomeDiagram"></div>
           </div>
         </div>
       </div>
@@ -330,6 +368,18 @@
   </div>
 </section>
 
+<!-- Экран ведущего: открывается вторым окном (клавиша P) и синхронизируется с проектором через postMessage. -->
+<section id="presenter" class="screen" aria-labelledby="pTitle">
+  <div class="wrap">
+    <div class="p-head">
+      <h1 id="pTitle">Экран ведущего</h1>
+      <span class="muted" id="pStatus">Ждём основной экран…</span>
+    </div>
+    <div id="pBody"></div>
+    <p class="p-note">Это окно видите только вы: перетащите его на экран ноутбука, а основное окно — на проектор. Клики здесь управляют проектором.</p>
+  </div>
+</section>
+
 <div class="toast hidden" id="toast" role="status"></div>
 <div class="help hidden" id="help" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
   <div class="panel">
@@ -338,6 +388,7 @@
       <dt><span class="kbd">1</span>–<span class="kbd">4</span></dt><dd>выбрать вариант</dd>
       <dt><span class="kbd">Enter</span> <span class="kbd">→</span></dt><dd>дальше</dd>
       <dt><span class="kbd">⌫</span> <span class="kbd">←</span></dt><dd>отменить последний выбор (если нажали не то)</dd>
+      <dt><span class="kbd">P</span></dt><dd>экран ведущего: заметки и подсказки во втором окне</dd>
       <dt><span class="kbd">F</span></dt><dd>полный экран</dd>
       <dt><span class="kbd">T</span></dt><dd>светлая / тёмная тема</dd>
       <dt><span class="kbd">R</span> <span class="kbd">R</span></dt><dd>в лобби (дважды — чтобы не сбросить игру случайно)</dd>
@@ -359,21 +410,26 @@
 
   var E = window.HALL_ENGINE;
   var NS = 'http://www.w3.org/2000/svg';
+  var IS_PRESENTER = location.hash === '#presenter';
   var scn = null, state = null, pending = null, history = [];
+  var times = [], stepStart = 0;
   var selected = null, svgSeq = 0;
 
   function $(id) { return document.getElementById(id); }
   function text(id, v) { $(id).textContent = v; }
   function screen() { return ['lobby', 'game', 'final'].filter(function (s) { return $(s).classList.contains('on'); })[0]; }
   function show(name) {
-    ['lobby', 'game', 'final'].forEach(function (s) { $(s).classList.toggle('on', s === name); });
+    ['lobby', 'game', 'final', 'presenter'].forEach(function (s) { $(s).classList.toggle('on', s === name); });
     window.scrollTo(0, 0);
+    sync();
   }
   function plural(n, one, few, many) {
     var m10 = n % 10, m100 = n % 100;
     return m10 === 1 && m100 !== 11 ? one : (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? few : many);
   }
   function signed(n) { return n > 0 ? '+' + n : (n < 0 ? '−' + Math.abs(n) : '0'); }
+  function mmss(ms) { var s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+  function node(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
 
   var toastT = null;
   function toast(msg) {
@@ -388,6 +444,7 @@
     if (errs.length) { invalid[p.id] = errs; console.error('Кейс ' + p.id + ' не прошёл проверку:', errs); }
   });
   var playable = window.HALL_SCENARIOS.filter(function (p) { return !invalid[p.id]; });
+  function byId(id) { return playable.find(function (p) { return p.id === id; }); }
 
   /* ---------- Диаграмма ---------- */
   function el(name, attrs) {
@@ -402,17 +459,24 @@
     var t = Math.min(dx ? (b.w / 2 + gap) / Math.abs(dx) : Infinity, dy ? (b.h / 2 + gap) / Math.abs(dy) : Infinity);
     return { x: cx + dx * t, y: cy + dy * t };
   }
+  // Подпись, которая не помещается в блок, сжимается по ширине, а не вылезает за рамку.
+  function fitText(t, s, maxW, charW) {
+    t.textContent = s;
+    if (s.length * charW > maxW) { t.setAttribute('textLength', maxW); t.setAttribute('lengthAdjust', 'spacingAndGlyphs'); }
+    return t;
+  }
 
-  function renderDiagram(pack) {
+  function renderDiagram(pack, focus) {
     var id = 'arr' + (++svgSeq);
-    var svg = el('svg', { viewBox: '0 0 640 320', 'class': 'diag', role: 'img', 'aria-label': 'Схема архитектуры: ' + pack.diagram.nodes.map(function (d) { return d.label; }).join(', ') });
+    focus = focus || [];
+    var svg = el('svg', { viewBox: '0 0 640 320', 'class': 'diag' + (focus.length ? ' has-focus' : ''), role: 'img', 'aria-label': 'Схема архитектуры: ' + pack.diagram.nodes.map(function (d) { return d.label; }).join(', ') });
     var defs = el('defs', {});
-    var marker = el('marker', { id: id, markerWidth: '9', markerHeight: '9', refX: '8', refY: '4.5', orient: 'auto', markerUnits: 'userSpaceOnUse' });
-    marker.appendChild(el('path', { d: 'M0,0 L9,4.5 L0,9 z', 'class': 'd-arrow' }));
+    var marker = el('marker', { id: id, markerWidth: '10', markerHeight: '10', refX: '9', refY: '5', orient: 'auto', markerUnits: 'userSpaceOnUse' });
+    marker.appendChild(el('path', { d: 'M0,0 L10,5 L0,10 z', 'class': 'd-arrow' }));
     defs.appendChild(marker);
     svg.appendChild(defs);
 
-    var H = 48, DW = 150, boxes = {};
+    var H = 54, DW = 150, boxes = {};
     pack.diagram.nodes.forEach(function (d) { boxes[d.id] = { x: d.x, y: d.y, w: d.w || DW, h: H }; });
 
     (pack.diagram.edges || []).forEach(function (e) {
@@ -421,24 +485,16 @@
       var acx = a.x + a.w / 2, acy = a.y + a.h / 2, bcx = b.x + b.w / 2, bcy = b.y + b.h / 2;
       var p1 = clipTo(bcx, bcy, a, 0), p2 = clipTo(acx, acy, b, 2);
       svg.appendChild(el('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, 'class': 'd-edge', 'marker-end': 'url(#' + id + ')' }));
-      if (e.label) {
-        var t = el('text', { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 - 6, 'class': 'd-elabel' });
-        t.textContent = e.label;
-        svg.appendChild(t);
-      }
+      if (e.label) svg.appendChild(fitText(el('text', { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 - 6, 'class': 'd-elabel' }), e.label, 200, 7));
     });
 
     pack.diagram.nodes.forEach(function (d) {
       var b = boxes[d.id];
-      svg.appendChild(el('rect', { x: b.x, y: b.y, width: b.w, height: b.h, rx: 7, 'class': 'd-box c-' + (d.color || 'gray') }));
-      var t = el('text', { x: b.x + b.w / 2, y: b.y + (d.note ? 21 : 29), 'class': 'd-label' });
-      t.textContent = d.label;
-      svg.appendChild(t);
-      if (d.note) {
-        var n = el('text', { x: b.x + b.w / 2, y: b.y + 38, 'class': 'd-note' });
-        n.textContent = d.note;
-        svg.appendChild(n);
-      }
+      var g = el('g', { 'class': 'd-node' + (focus.indexOf(d.id) >= 0 ? ' focus' : '') });
+      g.appendChild(el('rect', { x: b.x, y: b.y, width: b.w, height: b.h, rx: 7, 'class': 'd-box c-' + (d.color || 'gray') }));
+      g.appendChild(fitText(el('text', { x: b.x + b.w / 2, y: b.y + (d.note ? 23 : 33), 'class': 'd-label' }), d.label, b.w - 12, 8.4));
+      if (d.note) g.appendChild(fitText(el('text', { x: b.x + b.w / 2, y: b.y + 43, 'class': 'd-note' }), d.note, b.w - 12, 7.2));
+      svg.appendChild(g);
     });
     return svg;
   }
@@ -449,46 +505,44 @@
     var box = $('cases');
     box.innerHTML = '';
     window.HALL_SCENARIOS.forEach(function (p) {
-      var b = document.createElement('button');
-      b.className = 'case';
+      var b = node('button', 'case');
       b.setAttribute('aria-pressed', String(selected === p.id));
-      var h = document.createElement('h3'); h.textContent = p.title;
-      var d = document.createElement('p'); d.className = 'brief'; d.textContent = p.brief;
-      b.appendChild(h); b.appendChild(d);
+      b.appendChild(node('h3', null, p.title));
+      b.appendChild(node('p', 'brief', p.brief));
       if (invalid[p.id]) {
         b.disabled = true;
-        var err = document.createElement('p'); err.className = 'brief'; err.style.color = 'var(--sev)';
-        err.textContent = 'Кейс содержит ошибки и недоступен: ' + invalid[p.id][0];
+        var err = node('p', 'brief', 'Кейс содержит ошибки и недоступен: ' + invalid[p.id][0]);
+        err.style.color = 'var(--sev)';
         b.appendChild(err);
       } else {
         b.appendChild(renderDiagram(p));
         var steps = E.stepsLeft(p, p.start);
-        var meta = document.createElement('div'); meta.className = 'meta';
-        meta.innerHTML = '<span></span><span></span><span class="picked">Выбран</span>';
-        meta.children[0].textContent = steps + ' ' + plural(steps, 'шаг', 'шага', 'шагов');
-        meta.children[1].textContent = 'до ' + E.maxScore(p) + ' очков';
+        var meta = node('div', 'meta');
+        meta.appendChild(node('span', null, steps + ' ' + plural(steps, 'шаг', 'шага', 'шагов')));
+        meta.appendChild(node('span', null, 'до ' + E.maxScore(p) + ' очков'));
+        meta.appendChild(node('span', 'picked', 'Выбран'));
         b.appendChild(meta);
         b.onclick = function () { selected = p.id; renderLobby(); };
       }
       box.appendChild(b);
     });
-    var sel = playable.find(function (p) { return p.id === selected; });
+    var sel = byId(selected);
     var rl = $('rolesList'); rl.innerHTML = '';
     if (sel) Object.keys(sel.roles).forEach(function (k) {
-      var li = document.createElement('li');
-      var b = document.createElement('b'); b.textContent = sel.roles[k].name;
-      var s = document.createElement('span'); s.textContent = sel.roles[k].desc;
-      li.appendChild(b); li.appendChild(s); rl.appendChild(li);
+      var li = node('li');
+      li.appendChild(node('b', null, sel.roles[k].name + '. '));
+      li.appendChild(node('span', null, sel.roles[k].desc));
+      rl.appendChild(li);
     });
     $('startBtn').disabled = !sel;
     show('lobby');
   }
 
   function start() {
-    scn = playable.find(function (p) { return p.id === selected; });
+    scn = byId(selected);
     if (!scn) { toast('Выберите кейс'); return; }
     state = E.createGame(scn, { team: $('teamName').value.trim() || 'Команда зала' });
-    history = []; pending = null;
+    history = []; times = []; pending = null; stepStart = 0;
     renderGame();
   }
   $('startBtn').onclick = start;
@@ -498,7 +552,7 @@
 
   function renderStats() {
     text('teamLabel', state.team);
-    text('scoreVal', state.score);
+    text('scoreVal', String(state.score).replace('-', '−'));
     text('trapVal', state.log.filter(function (l) { return l.trap; }).length);
     var cls = tensionClass(state.tension);
     var num = $('tensionNum'); num.textContent = state.tension; num.className = 'num c-' + cls;
@@ -506,59 +560,63 @@
     fill.style.height = state.tension + '%';
     fill.style.setProperty('--t', state.tension + '%');
     fill.className = 'fill t-' + cls;
-    var done = state.log.length, total = done + E.stepsLeft(scn, state.nodeId);
     text('caseTitle', scn.title);
-    text('stepLabel', state.status === 'ENDED' ? 'финал' : 'шаг ' + (done + 1) + ' из ' + total);
+    // На экране последствий в шапке — шаг, который только что решили, а не следующий.
+    text('stepLabel', pending ? 'шаг ' + history.length + ' из ' + (history.length + E.stepsLeft(scn, state.nodeId)) : 'шаг ' + stepNo() + ' из ' + stepTotal());
   }
+  function stepNo() { return state.log.length + 1; }
+  function stepTotal() { return state.log.length + E.stepsLeft(scn, state.nodeId); }
 
   function renderGame() {
-    var node = scn.nodes[state.nodeId];
-    text('roleName', scn.roles[node.role].name);
-    text('roleTask', node.roleTask);
-    text('nodeTitle', node.title);
-    text('nodeText', node.text);
-    text('sayBox', node.say || '');
-    $('sayPanel').classList.toggle('hidden', !node.say);
+    var n = scn.nodes[state.nodeId];
+    text('roleName', scn.roles[n.role].name);
+    text('roleTask', n.roleTask);
+    text('nodeTitle', n.title);
+    text('nodeText', n.text);
     var box = $('choices');
     box.innerHTML = '';
-    node.choices.forEach(function (c, i) {
-      var b = document.createElement('button');
-      b.className = 'choice';
-      var k = document.createElement('span'); k.className = 'kbd'; k.textContent = i + 1;
-      var l = document.createElement('span'); l.textContent = c.label;
-      b.appendChild(k); b.appendChild(l);
+    n.choices.forEach(function (c, i) {
+      var b = node('button', 'choice');
+      b.appendChild(node('span', 'kbd', String(i + 1)));
+      b.appendChild(node('span', null, c.label));
       b.onclick = function () { pick(c.id); };
       box.appendChild(b);
     });
     var dg = $('diagramBox');
     dg.innerHTML = '';
-    dg.appendChild(renderDiagram(scn));
+    dg.appendChild(renderDiagram(scn, n.focus));
     renderStats();
     $('playView').classList.remove('hidden');
     $('outcomeView').classList.add('hidden');
+    if (!stepStart) stepStart = Date.now();
     show('game');
   }
 
   function pick(choiceId) {
+    if (!state || state.status === 'ENDED' || !$('outcomeView').classList.contains('hidden')) return;
+    var r;
+    try { r = E.choose(state, choiceId); } catch (e) { return; }
     history.push(state);
-    var r = E.choose(state, choiceId);
+    times.push(Date.now() - stepStart);
+    stepStart = 0;
     state = r.state;
     pending = r.result;
     renderOutcome();
   }
 
   function undo() {
-    if (!history.length) return;
+    if (!history.length || $('outcomeView').classList.contains('hidden')) return;
     state = history.pop();
+    stepStart = Date.now() - (times.pop() || 0); // время шага продолжает идти с того же места
     pending = null;
     renderGame();
     toast('Выбор отменён');
   }
 
   /* ---------- Последствия ---------- */
-  function verdict(node, c) {
+  function verdict(n, c) {
     if (c.trap) return { cls: 'trap', label: 'Ловушка' };
-    var top = Math.max.apply(null, node.choices.map(function (x) { return x.score; }));
+    var top = Math.max.apply(null, n.choices.map(function (x) { return x.score; }));
     if (c.score === top) return { cls: 'best', label: 'Лучший ход' };
     if (c.score > 0) return { cls: 'ok', label: 'Приемлемо' };
     return { cls: 'weak', label: 'Слабый ход' };
@@ -566,8 +624,9 @@
 
   function renderOutcome() {
     var c = pending.choice;
-    var node = scn.nodes[history[history.length - 1].nodeId];
-    var v = verdict(node, c);
+    var n = scn.nodes[history[history.length - 1].nodeId];
+    var v = verdict(n, c);
+    text('outcomeContext', 'Шаг ' + history.length + ' · ' + n.title + ' · ведёт ' + scn.roles[n.role].short);
     text('pickedLabel', c.label);
     text('outcomeText', c.outcome);
     $('hintBox').innerHTML = '<b>Для разбора.</b> ';
@@ -576,11 +635,12 @@
     var tag = $('verdictTag'); tag.className = 'tag ' + v.cls; tag.textContent = v.label;
     var g = $('gainVal');
     g.textContent = signed(pending.gained);
-    var unit = document.createElement('span'); unit.className = 'unit';
-    unit.textContent = plural(Math.abs(pending.gained), 'очко', 'очка', 'очков');
-    g.appendChild(unit);
+    g.appendChild(node('span', 'unit', plural(Math.abs(pending.gained), 'очко', 'очка', 'очков')));
     g.style.color = pending.gained > 0 ? 'var(--ok)' : (pending.gained < 0 ? 'var(--sev)' : 'var(--muted)');
     text('tensionDelta', 'Напряжение ' + signed(c.tension) + ' → ' + state.tension);
+    var od = $('outcomeDiagram'); od.innerHTML = '';
+    od.appendChild(node('h3', null, 'Архитектура'));
+    od.appendChild(renderDiagram(scn, n.focus));
     $('nextBtn').firstChild.textContent = state.status === 'ENDED' ? 'К итогам ' : 'Дальше ';
     renderStats();
     $('playView').classList.add('hidden');
@@ -590,6 +650,8 @@
   }
 
   function next() {
+    if (!pending) return;
+    pending = null;
     if (state.status === 'ENDED') renderFinal();
     else renderGame();
   }
@@ -600,48 +662,46 @@
   var lastSummary = null;
   function renderFinal() {
     var s = E.summary(scn, state);
+    s.steps.forEach(function (st, i) { st.ms = times[i] || 0; });
+    s.totalMs = times.reduce(function (a, b) { return a + b; }, 0);
     lastSummary = s;
-    var node = scn.nodes[state.nodeId];
+    var n = scn.nodes[state.nodeId];
     $('finalHead').className = 'final-head grade-' + s.grade.level;
     text('finalCase', scn.title + ' · ' + state.team);
     text('gradeTitle', s.grade.title);
     text('gradeText', s.grade.text);
     var m = $('metrics'); m.innerHTML = '';
-    [[s.score + ' / ' + s.max, 'очки'], [s.best + ' / ' + s.steps.length, 'лучших решений'], [s.traps, plural(s.traps, 'ловушка', 'ловушки', 'ловушек')], [s.tension, 'напряжение']]
+    [[s.score + ' / ' + s.max, 'очки'], [s.best + ' / ' + s.steps.length, 'лучших решений'], [s.traps, plural(s.traps, 'ловушка', 'ловушки', 'ловушек')], [mmss(s.totalMs), 'на кейс']]
       .forEach(function (x) {
-        var d = document.createElement('div'); d.className = 'metric';
-        var b = document.createElement('b'); b.textContent = x[0];
-        var sp = document.createElement('span'); sp.textContent = x[1];
-        d.appendChild(b); d.appendChild(sp); m.appendChild(d);
+        var d = node('div', 'metric');
+        d.appendChild(node('b', null, String(x[0])));
+        d.appendChild(node('span', null, x[1]));
+        m.appendChild(d);
       });
     var ol = $('recap'); ol.innerHTML = '';
     s.steps.forEach(function (st) {
-      var li = document.createElement('li');
-      if (st.trap) li.className = 'trap';
-      var t = document.createElement('div'); t.className = 'r-title'; t.textContent = st.title;
-      var r = document.createElement('span'); r.className = 'r-role'; r.textContent = scn.roles[st.role].short;
-      t.appendChild(r);
-      var p = document.createElement('div'); p.className = 'r-pick'; p.textContent = st.label;
-      var pts = document.createElement('div'); pts.className = 'r-pts'; pts.textContent = signed(st.gained);
+      var li = node('li', st.trap ? 'trap' : null);
+      var t = node('div', 'r-title', st.title);
+      t.appendChild(node('span', 'r-role', scn.roles[st.role].short));
+      var pts = node('div', 'r-pts', signed(st.gained));
+      pts.appendChild(node('small', null, mmss(st.ms)));
       pts.style.color = st.isBest ? 'var(--ok)' : (st.gained < 0 ? 'var(--sev)' : 'var(--muted)');
-      li.appendChild(t); li.appendChild(pts); li.appendChild(p);
-      if (!st.isBest) {
-        var bt = document.createElement('div'); bt.className = 'r-better'; bt.textContent = 'Лучше: ' + st.bestLabel;
-        li.appendChild(bt);
-      }
+      li.appendChild(t); li.appendChild(pts); li.appendChild(node('div', 'r-pick', st.label));
+      if (!st.isBest) li.appendChild(node('div', 'r-better', 'Лучше: ' + st.bestLabel));
       ol.appendChild(li);
     });
-    text('endTitle', node.title);
-    text('endText', node.text);
+    text('endTitle', n.title);
+    text('endText', n.text);
     show('final');
   }
 
   function report() {
     var s = lastSummary;
     var lines = ['# ' + scn.title + ' — итоги', '', 'Команда: ' + state.team, 'Оценка: ' + s.grade.title,
-      'Очки: ' + s.score + ' из ' + s.max + ' · лучших решений: ' + s.best + ' из ' + s.steps.length + ' · ловушки: ' + s.traps + ' · напряжение: ' + s.tension, '', '## Решения', ''];
+      'Очки: ' + s.score + ' из ' + s.max + ' · лучших решений: ' + s.best + ' из ' + s.steps.length + ' · ловушки: ' + s.traps +
+      ' · напряжение: ' + s.tension + ' · время: ' + mmss(s.totalMs), '', '## Решения', ''];
     s.steps.forEach(function (st, i) {
-      lines.push((i + 1) + '. **' + st.title + '** (' + scn.roles[st.role].short + '): ' + st.label + ' — ' + signed(st.gained) +
+      lines.push((i + 1) + '. **' + st.title + '** (' + scn.roles[st.role].short + ', ' + mmss(st.ms) + '): ' + st.label + ' — ' + signed(st.gained) +
         (st.trap ? ', ловушка' : '') + (st.isBest ? '' : '. Лучше: ' + st.bestLabel));
     });
     lines.push('', '## Разбор', '', scn.nodes[state.nodeId].text);
@@ -660,6 +720,112 @@
   };
   $('againBtn').onclick = function () { start(); };
   $('lobbyBtn').onclick = renderLobby;
+
+  /* ---------- Экран ведущего: синхронизация двух окон через postMessage ----------
+     Проектор — источник правды и шлёт снимок после каждого перехода; экран ведущего
+     только показывает заметки и присылает команды. postMessage, а не BroadcastChannel:
+     работает и по file://, где у страниц непрозрачный origin. Сообщения принимаются
+     только от «своего» окна (e.source), поэтому targetOrigin '*' безопасен. */
+  var presenterWin = null;
+  function openPresenter() {
+    if (presenterWin && !presenterWin.closed) { presenterWin.focus(); return; }
+    presenterWin = window.open(location.pathname + location.search + '#presenter', 'hall-presenter', 'width=980,height=760');
+    if (!presenterWin) toast('Браузер заблокировал второе окно: разрешите всплывающие окна для этой страницы');
+  }
+  $('presenterBtn').onclick = openPresenter;
+
+  function snapshot() {
+    var where = screen();
+    var outcome = where === 'game' && !$('outcomeView').classList.contains('hidden');
+    var snap = { type: 'hall:sync', screen: outcome ? 'outcome' : (where === 'game' ? 'play' : where), selected: selected };
+    if (scn && state) {
+      snap.scnId = scn.id; snap.team = state.team; snap.score = state.score; snap.tension = state.tension;
+      snap.nodeId = outcome ? history[history.length - 1].nodeId : state.nodeId;
+      snap.pickedId = outcome && pending ? pending.choice.id : null;
+      snap.step = outcome ? history.length : stepNo();
+      snap.total = outcome ? history.length + E.stepsLeft(scn, state.nodeId) : stepTotal();
+      if (where === 'final' && lastSummary) snap.summary = { score: lastSummary.score, max: lastSummary.max, best: lastSummary.best, steps: lastSummary.steps.length, traps: lastSummary.traps, grade: lastSummary.grade.title };
+    }
+    return snap;
+  }
+  function sync() {
+    if (IS_PRESENTER || !presenterWin || presenterWin.closed) return;
+    try { presenterWin.postMessage(snapshot(), '*'); } catch (e) { /* окно закрыто */ }
+  }
+
+  window.addEventListener('message', function (e) {
+    var d = e.data || {};
+    if (!IS_PRESENTER && e.source === presenterWin) {
+      if (d.type === 'hall:hello') sync();
+      else if (d.type === 'hall:cmd') {
+        if (d.cmd === 'pick') pick(d.id);
+        else if (d.cmd === 'next') next();
+        else if (d.cmd === 'undo') undo();
+        else if (d.cmd === 'start' && screen() === 'lobby') start();
+      }
+    } else if (IS_PRESENTER && e.source === window.opener && d.type === 'hall:sync') {
+      renderPresenter(d);
+    }
+  });
+
+  function cmd(c, id) { if (window.opener) window.opener.postMessage({ type: 'hall:cmd', cmd: c, id: id }, '*'); }
+
+  function presenterPanel(title, body) {
+    var p = node('div', 'panel');
+    p.appendChild(node('h3', null, title));
+    p.appendChild(node('p', null, body));
+    return p;
+  }
+
+  function renderPresenter(d) {
+    var body = $('pBody'); body.innerHTML = '';
+    var pack = byId(d.scnId || d.selected);
+    if (d.screen === 'lobby') {
+      text('pStatus', 'Лобби');
+      if (pack) body.appendChild(presenterPanel(pack.title, pack.brief));
+      var sb = node('button', 'btn primary', 'Начать кейс на проекторе');
+      sb.style.marginTop = '1rem'; sb.onclick = function () { cmd('start'); };
+      body.appendChild(sb);
+      return;
+    }
+    if (d.screen === 'final') {
+      text('pStatus', 'Финал');
+      if (d.summary) body.appendChild(presenterPanel(d.summary.grade, 'Очки ' + d.summary.score + ' из ' + d.summary.max + ', лучших решений ' + d.summary.best + ' из ' + d.summary.steps + ', ловушек ' + d.summary.traps + '.'));
+      body.appendChild(presenterPanel('Вопросы для разбора', '1) На каком шаге команда впервые опиралась на данные, а не на интуицию? 2) Какая ловушка выглядела убедительнее всего? 3) Где давление влияло сильнее улик? 4) Какое условие в вашей системе сделало бы такой сбой возможным?'));
+      return;
+    }
+    var n = pack.nodes[d.nodeId];
+    text('pStatus', 'Шаг ' + d.step + ' из ' + d.total + ' · очки ' + d.score + ' · напряжение ' + d.tension);
+    var h = node('h2', null, n.title + ' · ведёт ' + pack.roles[n.role].name);
+    h.style.cssText = 'font-size:1.4rem;margin-top:1rem';
+    body.appendChild(h);
+    var grid = node('div', 'p-grid');
+    grid.appendChild(presenterPanel('Что ждём от роли', n.facilitator || n.roleTask));
+    grid.appendChild(presenterPanel('Как подать залу', n.say || '—'));
+    body.appendChild(grid);
+    var list = node('div', 'p-choices');
+    var top = Math.max.apply(null, n.choices.map(function (x) { return x.score; }));
+    n.choices.forEach(function (c, i) {
+      var b = node('button', 'p-choice' + (d.pickedId === c.id ? ' picked' : ''));
+      b.appendChild(node('span', 'kbd', String(i + 1)));
+      b.appendChild(node('span', null, c.label));
+      var sc = node('span', 'p-score', signed(c.score) + (c.trap ? ' ловушка' : (c.score === top ? ' лучший' : '')));
+      sc.style.color = c.trap ? 'var(--sev)' : (c.score === top ? 'var(--ok)' : 'var(--muted)');
+      b.appendChild(sc);
+      b.appendChild(node('span', 'p-hint', c.hint || ''));
+      b.disabled = d.screen === 'outcome';
+      b.onclick = function () { cmd('pick', c.id); };
+      list.appendChild(b);
+    });
+    body.appendChild(list);
+    if (d.screen === 'outcome') {
+      var act = node('div', 'actions');
+      var nb = node('button', 'btn primary', 'Дальше'); nb.onclick = function () { cmd('next'); };
+      var ub = node('button', 'btn', 'Отменить выбор'); ub.onclick = function () { cmd('undo'); };
+      act.appendChild(nb); act.appendChild(ub);
+      body.appendChild(act);
+    }
+  }
 
   /* ---------- Тема, полный экран, справка ---------- */
   function toggleTheme() {
@@ -686,12 +852,14 @@
     // Enter/пробел на сфокусированной кнопке или ссылке — родная активация именно этого элемента.
     var t = e.target;
     if ((code === 'Enter' || code === 'NumpadEnter' || code === 'Space') && t && (t.tagName === 'BUTTON' || t.tagName === 'A')) return;
+    if (code === 'KeyT') { toggleTheme(); return; }
+    if (IS_PRESENTER) return;
     var helpOpen = !$('help').classList.contains('hidden');
     if (code === 'Escape') { toggleHelp(false); return; }
     if (e.key === '?' || (code === 'Slash' && e.shiftKey)) { toggleHelp(); return; }
     if (helpOpen) return;
     if (code === 'KeyF') { toggleFullscreen(); return; }
-    if (code === 'KeyT') { toggleTheme(); return; }
+    if (code === 'KeyP') { openPresenter(); return; }
     if (code === 'KeyR') {
       if (where === 'lobby') return;
       if (where === 'final' || Date.now() - armedReset < 3000) { armedReset = 0; renderLobby(); }
@@ -704,8 +872,7 @@
     if (!inOutcome) {
       var m = /^(?:Digit|Numpad)([1-4])$/.exec(code);
       if (m) {
-        var node = scn.nodes[state.nodeId];
-        var c = node.choices[+m[1] - 1];
+        var c = scn.nodes[state.nodeId].choices[+m[1] - 1];
         if (c) pick(c.id);
       }
     } else if (code === 'Enter' || code === 'ArrowRight' || code === 'NumpadEnter' || code === 'Space') {
@@ -715,7 +882,14 @@
     }
   });
 
-  renderLobby();
+  if (IS_PRESENTER) {
+    document.title = 'Экран ведущего — инцидент-тренировка';
+    show('presenter');
+    if (window.opener) window.opener.postMessage({ type: 'hall:hello' }, '*');
+    else text('pStatus', 'Откройте это окно с основного экрана: кнопка «Экран ведущего» или клавиша P');
+  } else {
+    renderLobby();
+  }
 })();
 </script>
 </body>

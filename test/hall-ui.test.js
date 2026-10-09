@@ -65,3 +65,15 @@ test('hall.html: сценарии валидируются при загрузк
 test('hall.html: Enter на сфокусированной кнопке не перехватывается глобальным обработчиком', () => {
   assert.ok(/t\.tagName === 'BUTTON' \|\| t\.tagName === 'A'/.test(html), 'нужна защита родной активации кнопок');
 });
+
+test('hall.html: подсказки ведущему (say, facilitator) не выводятся на экран зала', () => {
+  const projector = html.slice(0, html.indexOf('<section id="presenter"'));
+  assert.ok(!/sayBox|Ведущему</.test(projector), 'на проекторе остался блок «Ведущему»');
+  const script = html.slice(html.lastIndexOf('<script>'));
+  const before = script.slice(0, script.indexOf('function renderPresenter'));
+  assert.ok(!/\.facilitator|\.say\b/.test(before), 'say/facilitator используются вне экрана ведущего');
+});
+
+test('hall.html: экран ведущего принимает сообщения только от своего окна', () => {
+  assert.ok(html.includes('e.source === presenterWin') && html.includes('e.source === window.opener'), 'нет проверки e.source в postMessage');
+});
