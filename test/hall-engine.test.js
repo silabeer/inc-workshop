@@ -215,3 +215,58 @@ test('choose: лог фиксирует флаг ловушки выбранно
   const r2 = HALL_ENGINE.choose(state, 'n2a');
   assert.equal(r2.state.log[1].trap, false, 'у обычного варианта trap:false');
 });
+
+test('validate: цикл в графе решений ловит', () => {
+  const bad = makeFix();
+  bad.nodes.n2.choices[1].goto = 'n1';
+  const errs = HALL_ENGINE.validate(bad);
+  assert.ok(errs.some(e => /цикл/.test(e)), `got: ${errs}`);
+});
+
+test('validate: вариант без числовых score/tension или без outcome ловит', () => {
+  const bad = makeFix();
+  bad.nodes.n1.choices[0].score = '2';
+  delete bad.nodes.n2.choices[0].outcome;
+  const errs = HALL_ENGINE.validate(bad);
+  assert.ok(errs.some(e => /n1a/.test(e) && /score/.test(e)), `got: ${errs}`);
+  assert.ok(errs.some(e => /n2a/.test(e) && /outcome/.test(e)), `got: ${errs}`);
+});
+
+test('maxScore: максимум очков по лучшему пути от старта', () => {
+  assert.equal(HALL_ENGINE.maxScore(makeFix()), 3);
+  const branchy = makeFix();
+  branchy.nodes.n1.choices[1].goto = 'nEnd'; // короткий путь не должен перебить длинный
+  branchy.nodes.n1.choices[1].score = 2;
+  assert.equal(HALL_ENGINE.maxScore(branchy), 3);
+});
+
+test('summary: шаги с ролью, лучшим вариантом, ловушками и оценкой', () => {
+  const scn = makeFix();
+  scn.nodes.n1.choices[1].trap = true;
+  let st = HALL_ENGINE.createGame(scn);
+  st = HALL_ENGINE.choose(st, 'n1b').state;
+  st = HALL_ENGINE.choose(st, 'n2a').state;
+  const s = HALL_ENGINE.summary(scn, st);
+  assert.equal(s.score, 0);
+  assert.equal(s.max, 3);
+  assert.equal(s.traps, 1);
+  assert.equal(s.best, 1);
+  assert.equal(s.steps.length, 2);
+  assert.deepEqual(
+    s.steps.map(x => [x.nodeId, x.role, x.label, x.gained, x.isBest, x.trap]),
+    [['n1', 'commander', 'катастрофа', -1, false, true], ['n2', 'scout', 'вверх', 1, true, false]]
+  );
+  assert.equal(s.steps[0].bestLabel, 'хорошо');
+  assert.equal(typeof s.grade.title, 'string');
+  assert.ok(['great', 'good', 'shaky', 'bad'].includes(s.grade.level));
+});
+
+test('summary: оценка по доле от максимума', () => {
+  const g = r => HALL_ENGINE.grade(r).level;
+  assert.equal(g(1), 'great');
+  assert.equal(g(0.85), 'great');
+  assert.equal(g(0.6), 'good');
+  assert.equal(g(0.35), 'shaky');
+  assert.equal(g(0.1), 'bad');
+  assert.equal(g(-0.5), 'bad');
+});
