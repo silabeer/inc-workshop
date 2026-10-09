@@ -43,3 +43,21 @@ test('hall.html: дуэльная механика убрана — одна к�
   assert.ok(!html.includes('nameB'), 'второе поле команды (nameB) осталось');
   assert.ok(!html.includes("'winner'"), 'вердикт победителя (winner) остался');
 });
+
+test('hall.html: горячие клавиши по e.code — работают в русской раскладке', () => {
+  assert.ok(html.includes("'KeyR'") && /Digit\|Numpad/.test(html), 'keydown должен опираться на e.code');
+});
+
+test('hall.html: контент сценария не вставляется через innerHTML', () => {
+  assert.ok(!/innerHTML\s*=[^;]*\.(label|outcome|text|title|hint|brief)\b/.test(html), 'текст сценария через innerHTML — XSS-риск');
+});
+
+test('hall.html: финал строится из HALL_ENGINE.summary, есть отмена выбора и защита R от случайного сброса', () => {
+  assert.ok(html.includes('E.summary('), 'финал не использует summary движка');
+  assert.ok(html.includes('function undo'), 'нет отмены выбора');
+  assert.ok(html.includes('armedReset'), 'R сбрасывает игру с одного нажатия');
+});
+
+test('hall.html: сценарии валидируются при загрузке', () => {
+  assert.ok(html.includes('E.validate('), 'битый кейс должен отсекаться в лобби');
+});

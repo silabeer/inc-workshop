@@ -16,8 +16,8 @@ HALL_SCENARIO({
     nodes: [
       { id: 'clients', label: 'Приложение 6.2', x: 8, y: 136, color: 'gray', note: 'TLS pinning' },
       { id: 'edge', label: 'edge-nginx', x: 182, y: 136, color: 'red', note: 'серт истёк 12:00:00' },
-      { id: 'api', label: 'api-service', x: 356, y: 136, color: 'green', note: '5xx 0% · p99 118 мс' },
-      { id: 'db', label: 'postgresql', x: 504, y: 136, w: 128, color: 'green' },
+      { id: 'api', label: 'api-service', x: 356, y: 136, color: 'green', note: '5xx 0% · p99 118 мс' },
+      { id: 'db', label: 'postgresql', x: 524, y: 136, w: 112, color: 'green' },
       { id: 'renew', label: 'renew-certs.sh (cron)', x: 182, y: 16, w: 170, color: 'gray', note: 'отключён 7 дней' },
     ],
     edges: [
@@ -67,7 +67,7 @@ HALL_SCENARIO({
       text: 'Серт истёк, renewal мёртв: после миграции ноды ACME-секрет потерялся, скрипт падает 30 дней, а неделю назад дежурный отключил cron «до разборки». Правило мониторинга смотрит на старый путь /etc/nginx/tls/old.pem — 30 дней no data. Владелец ранбука уволен месяц назад. В vault лежит аварийный сертификат на 30 дней (ранбук, раздел 9).',
       role: 'domain',
       roleTask: 'Найдите ранбук обновления TLS. Назовите команде два пути: полное лечение по ранбуку и аварийный сертификат из vault — с ценой каждого.',
-      say: 'Время деньги: 150 000 ₽/мин простоя. Спрашивайте зал: полное лечение или быстрый костыль?',
+      say: 'Время деньги: 150 000 ₽/мин простоя. Спрашивайте зал: полное лечение или быстрый костыль?',
       choices: [
         { id: 'c3a', label: 'M-P1: новый сертификат по ранбуку + nginx -s reload', score: 2, tension: -10, goto: 'c4',
           outcome: 'Полноценное лечение: новый серт, цепочка ок, reload. Дольше по времени, но без оговорок. Error Rate падает до 1%.',

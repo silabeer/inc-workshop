@@ -270,3 +270,10 @@ test('summary: оценка по доле от максимума', () => {
   assert.equal(g(0.1), 'bad');
   assert.equal(g(-0.5), 'bad');
 });
+
+test('stepsLeft: число решений до конца по самому длинному пути', () => {
+  const scn = makeFix();
+  assert.equal(HALL_ENGINE.stepsLeft(scn, 'n1'), 2);
+  assert.equal(HALL_ENGINE.stepsLeft(scn, 'n2'), 1);
+  assert.equal(HALL_ENGINE.stepsLeft(scn, 'nEnd'), 0);
+});

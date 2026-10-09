@@ -128,6 +128,13 @@
     return best(scn.start);
   }
 
+  // Сколько решений осталось до end по самому длинному пути — для счётчика «шаг N из M».
+  function stepsLeft(scn, nodeId) {
+    const n = scn.nodes[nodeId];
+    if (!n || n.end) return 0;
+    return 1 + Math.max.apply(null, n.choices.map(c => stepsLeft(scn, c.goto)));
+  }
+
   const GRADES = [
     { min: 0.85, level: 'great', title: 'Образцовое реагирование', text: 'Команда шла от данных, обошла ловушки и закрыла инцидент по критерию.' },
     { min: 0.6, level: 'good', title: 'Уверенно, с потерями', text: 'Причину нашли, но часть времени ушла на ложные пути. Разберите шаги, где выбор был не лучшим.' },
@@ -160,5 +167,5 @@
     };
   }
 
-  return { validate, createGame, choose, maxScore, grade, summary };
+  return { validate, createGame, choose, maxScore, stepsLeft, grade, summary };
 });

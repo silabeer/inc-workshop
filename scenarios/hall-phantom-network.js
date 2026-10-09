@@ -14,11 +14,11 @@ HALL_SCENARIO({
   },
   diagram: {
     nodes: [
-      { id: 'clients', label: 'Мобильное приложение 5.8', x: 8, y: 136, color: 'gray', note: 'ретраит 5xx ×12' },
+      { id: 'clients', label: 'Приложение 5.8', x: 8, y: 136, color: 'gray', note: 'ретраит 5xx ×12' },
       { id: 'edge', label: 'edge-gateway (Envoy)', x: 182, y: 136, color: 'red', note: '5xx 92% · RPS ×4,2' },
       { id: 'order', label: 'order-service', x: 356, y: 88, color: 'red', note: 'CrashLoop · exit 137' },
       { id: 'pgb', label: 'PgBouncer → Postgres', x: 488, y: 16, w: 144, color: 'yellow', note: 'cl_waiting 70' },
-      { id: 'pay', label: 'payment-proxy', x: 356, y: 232, color: 'gray', note: '48 in-flight висят' },
+      { id: 'pay', label: 'payment-proxy', x: 316, y: 232, color: 'gray', note: '48 in-flight висят' },
       { id: 'acq', label: 'acq-gw (эквайер)', x: 488, y: 140, w: 144, color: 'red', note: 'молчит: нет FIN/RST' },
       { id: 'nspk', label: 'nspk (СБП)', x: 488, y: 244, w: 144, color: 'green', note: '200 за 90 мс' },
     ],
@@ -35,7 +35,7 @@ HALL_SCENARIO({
   nodes: {
     p1: {
       id: 'p1', title: 'Алерт',
-      text: '14:07. [CRITICAL] 504 Gateway Timeout on checkout-api > 45%. Success Rate: 8,4%. RPS на edge-gateway вырос с 2 010 до 8 480 за десять минут, 5xx — 92%. Поды order-service в CrashLoopBackOff (Exit Code: 137), HPA на максимуме. Саппорт: 212 тикетов за три минуты.',
+      text: '14:07. [CRITICAL] 504 Gateway Timeout on checkout-api > 45%. Success Rate: 8,4%. RPS на edge-gateway вырос с 2 010 до 8 480 за десять минут, 5xx — 92%. Поды order-service в CrashLoopBackOff (Exit Code: 137), HPA на максимуме. Саппорт: 212 тикетов за три минуты.',
       role: 'commander',
       roleTask: 'Объявите инцидент и заведите доску гипотез. Назовите три версии, которые звучат первыми: релиз, DDoS, «что-то с базой».',
       say: 'Дайте залу 30 секунд: что первым делом? Не обсуждайте долго — это первая интуиция, она и в проде такой бывает.',
@@ -60,7 +60,7 @@ HALL_SCENARIO({
       choices: [
         { id: 'p2a', label: 'Не резать: просим данные о ретраях и ждём срез', score: 2, tension: -5, goto: 'p3',
           outcome: 'Подтверждается: шторм порождён самим клиентом 5.8. Решение — срезать повторы на шлюзе (429 + Retry-After), а не резать людей. Срез применяют: Envoy отвечает 429 за миллисекунды.',
-          hint: 'Правильный путь: M-P1 (Envoy 429 по x-client-retry-count). После среза RPS должен упасть с 8 500 до ~2 200 — сверьте на следующих шагах.' },
+          hint: 'Правильный путь: M-P1 (Envoy 429 по x-client-retry-count). После среза RPS должен упасть с 8 500 до ~2 200 — сверьте на следующих шагах.' },
         { id: 'p2b', label: 'Согласиться с ИБ и включить WAF-резку', score: 0, tension: 15, goto: 'p3', trap: true,
           outcome: 'Тот же эффект: 403 всем, включая СБП. Теперь ещё и ИБ уверено, что «отбили DDoS», и сопротивляется отключению. Правильный срез ретраев всё равно придётся делать позже.',
           hint: 'Ловушка T-WAF повторяется. Одинаковые цифры RPS ≠ атака; 76% дублей X-Request-Id говорят о ретраях.' },
