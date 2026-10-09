@@ -70,7 +70,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 Тренажёр инцидент-респонса для живых воркшопов. Ноль зависимостей, vanilla JS, Node ≥ 18.
 
-- Тесты: `npm test` (= `node --test --test-force-exit`). Всё должно быть зелёным перед коммитом.
+- Тесты: `npm test` (= `node --test`). Всё должно быть зелёным перед коммитом.
 - Запуск: `npm start` (= `node server.js`), холл-режим работает и без сервера (`hall.html` по file://).
 - Движки (`engine.js`, `hall-engine.js`) — UMD, только чистые функции без DOM/сети/дат; логику, которую можно протестировать, выносим туда.
 - Контент — `scenarios/*.js`, саморегистрация через `SCENARIO(...)` / `HALL_SCENARIO(...)`. Схемы: `docs/scenario-authoring.md`.

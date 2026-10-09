@@ -68,7 +68,7 @@ docker run -d -p 8085:8085 -v inc-workshop-data:/app/data inc-workshop
 ## Разработка
 
 ```bash
-npm test                # = node --test --test-force-exit; CI гоняет Node 18 и 22
+npm test                # = node --test; CI гоняет Node 18 и 22
 ```
 
 ```
