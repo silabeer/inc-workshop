@@ -15,10 +15,21 @@ const CASES = [
     facts: ['12:00:00', 'SSL_do_handshake() failed', '/etc/nginx/tls/old.pem', 'jackson 2.15 → 2.16', '68% трафика',
       'ACME-секрет не найден после миграции', 'дежурный отключил cron «до разборки»', '7,4%', 'v1.9.2', 'renew-certs.sh'],
   },
-  // Новые кейсы без отдельного документа ведущего: фактура живёт только в паке.
-  { file: 'disk-full.js' },
-  { file: 'dns-ttl.js' },
-  { file: 'retry-cascade.js' },
+  {
+    file: 'disk-full.js', doc: 'disk-full-logs.md',
+    facts: ['184 000', 'lsof +L1', 'kafka.authorizer.logger=INFO', 'PLAT-2291', 'storage.total_limit_size',
+      'min.insync.replicas=2', 'notify.push.max_age_min', '/proc/1/fd/187', '158 ГБ', 'reset-offsets --to-latest'],
+  },
+  {
+    file: 'dns-ttl.js', doc: 'dns-ttl-migration.md',
+    facts: ['185.12.40.17', '91.208.14.62', 'TTL 41380', 'networkaddress.cache.ttl=-1', '10.20.0.17',
+      '×6 112', 'Verify return code: 0', 'frontend :443 mode tcp → backend 91.208.14.62:443', '1 420 → 980', '10:00:14'],
+  },
+  {
+    file: 'retry-cascade.js', doc: 'retry-cascade.md',
+    facts: ['57 000', '19:31–19:44', '38,1 млн', 'mesh.retries.enabled: false', 'http2MaxRequests: 300',
+      'price_rules_valid_to_idx', '1 600 коннектов при лимите 600', 'retryOn: 5xx,reset,connect-failure', '120 000 ₽/мин', '1 s < 2 s < 5 s'],
+  },
 ];
 
 // Проходит кейс, выбирая вариант функцией pick(step); ведущий раскрывает выбор явно.

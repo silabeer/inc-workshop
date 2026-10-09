@@ -1,5 +1,6 @@
-// Запускатель UI-проверок: свой сервер на свободном порту с временным DATA_DIR → check_ui.py → остановка.
+// Запускатель UI-проверок: свои серверы на свободных портах с временными DATA_DIR → проверки → остановка.
 // Порт выбирается автоматически: тесты засевают данные и не должны попасть в чужую живую игру.
+// Два сервера: без PIN (основной сценарий) и с PIN (вход ведущего, сессия в cookie).
 // Нужен Python Playwright: python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 //                         && .venv/bin/playwright install chromium
 const {spawn} = require('child_process');
@@ -7,33 +8,36 @@ const fs = require('fs'), net = require('net'), os = require('os'), path = requi
 
 const ROOT = path.join(__dirname, '..');
 const PY = [path.join(ROOT, '.venv', 'bin', 'python'), 'python3'].find(p => p === 'python3' || fs.existsSync(p));
-const data = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-ui-'));
 
 const freePort = () => new Promise((res, rej) => {
   const s = net.createServer().once('error', rej).listen(0, '127.0.0.1', () => { const {port} = s.address(); s.close(() => res(port)); });
 });
 
-(async () => {
-  const PORT = await freePort();
+async function startServer(pin) {
+  const port = await freePort(), data = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-ui-'));
   let exited = false;
-  const server = spawn(process.execPath, [path.join(ROOT, 'server.js')], {
-    env: {...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: data, GM_PIN: ''},
+  const proc = spawn(process.execPath, [path.join(ROOT, 'server.js')], {
+    env: {...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: data, GM_PIN: pin, PUBLIC_URL: ''},
     stdio: ['ignore', 'ignore', 'inherit'],
   });
-  server.on('exit', () => { exited = true; });
-  const stop = code => { server.kill(); fs.rmSync(data, {recursive: true, force: true}); process.exit(code); };
-
-  let ready = false;
+  proc.on('exit', () => { exited = true; });
+  const stop = () => { proc.kill(); fs.rmSync(data, {recursive: true, force: true}); };
   for (let i = 0; i < 50 && !exited; i++) {
-    try { ready = (await fetch(`http://127.0.0.1:${PORT}/healthz`)).ok; } catch (e) {}
-    if (ready) break;
+    try { if ((await fetch(`http://127.0.0.1:${port}/healthz`)).ok) return {base: `http://127.0.0.1:${port}`, stop}; } catch (e) {}
     await new Promise(r => setTimeout(r, 100));
   }
-  if (!ready || exited) { console.error('Тестовый сервер не запустился — UI-проверки не выполнены.'); return stop(1); }
+  stop();
+  return null;
+}
 
-  // Сначала QR-кодер (декодер читает каждый код), потом сценарий в браузере.
+(async () => {
+  const open = await startServer(''), locked = await startServer('4821');
+  const stopAll = code => { open && open.stop(); locked && locked.stop(); process.exit(code); };
+  if (!open || !locked) { console.error('Тестовый сервер не запустился — UI-проверки не выполнены.'); return stopAll(1); }
+
+  // Сначала QR-кодер (декодер читает каждый код), потом сценарии в браузере.
   const py = (script, env) => new Promise(res => spawn(PY, ['-I', path.join(__dirname, script)], {env: {...process.env, ...env}, stdio: 'inherit'}).on('exit', c => res(c || 0)));
   const qr = await py('check_qr.py', {});
-  const ui = await py('check_ui.py', {UI_BASE: `http://127.0.0.1:${PORT}`});
-  stop(qr || ui);
+  const ui = await py('check_ui.py', {UI_BASE: open.base, UI_BASE_PIN: locked.base, UI_PIN: '4821'});
+  stopAll(qr || ui);
 })();

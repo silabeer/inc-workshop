@@ -3,31 +3,29 @@
   'use strict';
   const { h, mount, PHASES, timer, verdictTag, store, post, toast } = UI;
 
-  // Токен устройства: перезагрузка или уснувший телефон возвращают ту же роль без участия ведущего.
-  function deviceToken() {
-    let t = store.get('incw-token');
-    if (!t) {
-      t = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('');
-      store.set('incw-token', t);
-    }
-    return t;
+  // Токен устройства живёт в HttpOnly-cookie, которую выдаёт сервер: перезагрузка или уснувший телефон
+  // возвращают ту же роль, а токен не виден странице и не попадает в адреса запросов.
+  // Токен из localStorage (до 2.2) переносится в cookie один раз — занятая роль не теряется.
+  async function ensureDevice() {
+    const old = store.get('incw-token');
+    await post('/api/device', old ? { token: old } : {});
+    store.del('incw-token');
   }
   // Ключи устройства — по комнате: в другой комнате у того же телефона своя роль.
   const key = k => 'incw-' + k + (UI.ROOM === 'main' ? '' : '-' + UI.ROOM);
 
   let es = null, role = null, spectator = false, last = null, busy = false;
-  const token = deviceToken();
   let code = store.get(key('code')) || '';
 
   function reconnect() {
     if (es) es.close();
-    es = UI.connect(role ? { view: 'play', role, token } : { view: 'play', token }, render);
+    es = UI.connect(role ? { view: 'play', role } : { view: 'play' }, render);
   }
 
   async function claim(id) {
     if (busy) return;
     busy = true;
-    const r = await post('/api/claim', { role: id, token, code });
+    const r = await post('/api/claim', { role: id, code });
     busy = false;
     if (r.status === 403) { code = ''; store.del(key('code')); if (last) render(last); return; }
     if (!r.ok) return;
@@ -41,11 +39,11 @@
     busy = true;
     if (role) {
       if (last.myVote) { busy = false; return; }
-      const r = await post('/api/vote', { role, token, option: optionId });
+      const r = await post('/api/vote', { role, option: optionId });
       if (r.status === 403) { toast('Роль передана другому устройству'); role = null; store.del(key('role')); reconnect(); }
     } else {
       if (last.audienceVote) { busy = false; return; }
-      const r = await post('/api/audience', { token, option: optionId, code });
+      const r = await post('/api/audience', { option: optionId, code });
       if (r.status === 403) { code = ''; store.del(key('code')); render(last); }
     }
     busy = false;
@@ -155,10 +153,11 @@
     mount('playBody', head(v), body);
   }
 
-  function start() {
+  async function start() {
     document.title = 'Телефон — инцидент-тренировка';
     role = store.get(key('role'));
     spectator = !role && store.get(key('spectator')) === '1';
+    await ensureDevice();
     reconnect();
   }
 

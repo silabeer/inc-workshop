@@ -298,3 +298,18 @@ test('звук: настройка переживает откат', () => {
   assert.equal(s.phase, 'lobby');
   assert.equal(s.sound, true);
 });
+
+test('заметки ведущего: по шагам, переживают откат, попадают в отчёт и только в пульт', () => {
+  let s = run(E.createSession(PACK), { type: 'start' }, { type: 'voting' });
+  s = E.apply(PACK, s, { type: 'note', stepId: 's1', text: 'Скаут не прочитал S4 — зал проголосовал за рестарт' }, 3);
+  s = E.apply(PACK, s, { type: 'reveal', option: 'B' }, 4);
+  s = E.apply(PACK, s, { type: 'undo' }, 5);
+  assert.equal(s.notes.s1, 'Скаут не прочитал S4 — зал проголосовал за рестарт');
+  assert.throws(() => E.apply(PACK, s, { type: 'note', stepId: 'nope', text: 'x' }, 6), /Нет такого шага/);
+  assert.equal(E.view(PACK, s, 'gm', { now: 1 }).notes.s1.startsWith('Скаут'), true);
+  assert.ok(!JSON.stringify(E.view(PACK, s, 'screen', { now: 1 })).includes('Скаут не прочитал'), 'заметки не на проекторе');
+  s = E.apply(PACK, s, { type: 'reveal', option: 'A' }, 7);
+  assert.match(E.report(PACK, s), /## Заметки ведущего\n\n- \*\*Первый шаг:\*\* Скаут не прочитал S4/);
+  s = E.apply(PACK, s, { type: 'note', stepId: 's1', text: '  ' }, 8);
+  assert.equal(s.notes.s1, undefined, 'пустая заметка удаляет');
+});

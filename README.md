@@ -67,14 +67,18 @@ docker run -d -p 8085:8085 -e GM_PIN=4821 -v inc-workshop-data:/app/data inc-wor
 | Фантомная сеть и шторм повторов | 10 шагов, ~40 минут, высокая | Эквайер молчит без FIN/RST, вызовы без таймаутов, мобильный клиент добивает ретраями |
 | Каскад ретраев в прайм-тайм | 9 шагов, ~40 минут, высокая | Ретраи на каждом слое умножают нагрузку на базу в 27 раз, до распродажи 38 минут |
 
-Пак кейса (`scenarios/*.js`) — единственный источник правды. У двух первых кейсов есть документы ведущего
-с полной фактурой (игрокам не показывать), тест сверяет с ними ключевые числа:
+Пак кейса (`scenarios/*.js`) — единственный источник правды. К каждому кейсу есть документ ведущего
+с полной фактурой и разбором шагов (игрокам не показывать), тест сверяет с ним ключевые числа:
 [`expired-certificate-training.md`](expired-certificate-training.md),
-[`phantom-network-asymmetric.md`](phantom-network-asymmetric.md).
+[`dns-ttl-migration.md`](dns-ttl-migration.md),
+[`disk-full-logs.md`](disk-full-logs.md),
+[`phantom-network-asymmetric.md`](phantom-network-asymmetric.md),
+[`retry-cascade.md`](retry-cascade.md).
 
 ## Документация
 
 - [Руководство ведущего](docs/facilitator-guide.md): подготовка, раунд, разбор, неполадки.
+- [Прогон на живой группе](docs/playtest-checklist.md): чек-лист и [форма заметок наблюдателя](docs/playtest-notes-form.md).
 - [Как написать кейс](docs/scenario-authoring.md): формат пака и правила валидатора.
 - [Архитектура](docs/architecture.md): сервер, представления для экранов, модель безопасности.
 - [Предложения по развитию](docs/roadmap.md).

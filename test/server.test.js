@@ -20,9 +20,23 @@ async function start(t, opts = {}) {
 }
 
 // Первое SSE-сообщение потока: представление, которое сервер шлёт этому клиенту.
-async function firstEvent(port, query) {
+// Секреты в адресе сервер больше не принимает: для удобства тестов `token=` и `pin=` в query
+// превращаются в cookie устройства и cookie сессии ведущего (через /api/auth). raw: true — отправить как есть.
+async function firstEvent(port, query, opts = {}) {
+  const q = new URLSearchParams(query), headers = {};
+  if (!opts.raw) {
+    const jar = [];
+    if (q.has('token')) { jar.push('incw_dev=' + encodeURIComponent(q.get('token'))); q.delete('token'); }
+    if (q.has('pin')) {
+      const a = await fetch(`${BASE}:${port}/api/auth`, { headers: { 'x-gm-pin': q.get('pin') } });
+      const sc = a.headers.get('set-cookie');
+      if (sc) jar.push(sc.split(';')[0]);
+      q.delete('pin');
+    }
+    if (jar.length) headers.cookie = jar.join('; ');
+  }
   const ac = new AbortController();
-  const r = await fetch(`${BASE}:${port}/events?${query}`, { signal: ac.signal });
+  const r = await fetch(`${BASE}:${port}/events?${opts.raw ? query : q}`, { signal: ac.signal, headers });
   if (r.status !== 200) { ac.abort(); return { status: r.status }; }
   const reader = r.body.getReader();
   let buf = '';
@@ -403,4 +417,55 @@ test('HTTPS: с сертификатом сервер отдаёт страни�
   assert.equal(r.statusCode, 200);
   assert.equal(JSON.parse(body).tls, true);
   assert.match(r.headers['strict-transport-security'], /max-age/);
+});
+
+test('секреты не в адресе: PIN и токен в query игнорируются, работают только cookie', async (t) => {
+  const s = await start(t, { gmPin: '4821' });
+  await s.post('/api/claim', { role: 'scout', token: 'tok-scout-1' });
+  assert.equal((await firstEvent(s.port, 'view=gm&pin=4821', { raw: true })).status, 401, 'PIN в адресе не принимается');
+  const v = (await firstEvent(s.port, 'view=play&token=tok-scout-1', { raw: true })).view;
+  assert.equal(v.role, null, 'токен в адресе не принимается');
+  assert.equal((await firstEvent(s.port, 'view=play&token=tok-scout-1')).view.role.id, 'scout', 'тот же токен в cookie — роль видна');
+});
+
+test('сессия ведущего: PIN обменивается на HttpOnly-cookie, выход её отзывает', async (t) => {
+  const s = await start(t, { gmPin: '4821' });
+  const a = await fetch(`${BASE}:${s.port}/api/auth`, { headers: { 'x-gm-pin': '4821' } });
+  const sc = a.headers.get('set-cookie');
+  assert.match(sc, /^incw_gm=[0-9a-f]{48};/);
+  assert.match(sc, /HttpOnly/);
+  assert.match(sc, /SameSite=Strict/);
+  const cookie = sc.split(';')[0];
+  assert.equal((await s.post('/api/cmd', { type: 'start' }, { cookie })).status, 200);
+  assert.equal((await s.get('/api/pack', { cookie })).status, 200);
+  assert.equal((await s.post('/api/logout', {}, { cookie })).status, 200);
+  assert.equal((await s.post('/api/cmd', { type: 'next' }, { cookie })).status, 401);
+  assert.equal((await s.get('/api/auth')).status, 401, 'без PIN и сессии — 401');
+  for (let i = 0; i < 15; i++) await s.get('/api/auth');
+  assert.equal((await s.get('/api/auth', { 'x-gm-pin': '4821' })).status, 200, 'запросы без PIN не считаются перебором');
+});
+
+test('токен устройства: сервер выдаёт HttpOnly-cookie и переносит старый токен телефона', async (t) => {
+  const s = await start(t);
+  await s.post('/api/claim', { role: 'domain', token: 'old-token-123' });
+  const r = await fetch(`${BASE}:${s.port}/api/device`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'old-token-123' }) });
+  const sc = r.headers.get('set-cookie');
+  assert.match(sc, /^incw_dev=old-token-123;/);
+  assert.match(sc, /HttpOnly/);
+  assert.match(sc, /SameSite=Lax/);
+  const cookie = sc.split(';')[0];
+  assert.equal((await firstEvent(s.port, 'view=play', { raw: true, headers: {} })).view.role, null);
+  const ac = new AbortController();
+  const ev = await fetch(`${BASE}:${s.port}/events?view=play`, { headers: { cookie }, signal: ac.signal });
+  const chunk = new TextDecoder().decode((await ev.body.getReader().read()).value);
+  ac.abort();
+  assert.equal(JSON.parse(chunk.slice(6)).role.id, 'domain', 'роль, занятая до обновления, сохранилась');
+  const fresh = await fetch(`${BASE}:${s.port}/api/device`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  assert.match(fresh.headers.get('set-cookie'), /^incw_dev=[0-9a-f]{24};/);
+});
+
+test('запрос с чужого сайта отклоняется (Origin)', async (t) => {
+  const s = await start(t);
+  assert.equal((await s.post('/api/cmd', { type: 'start' }, { origin: 'https://evil.example' })).status, 403);
+  assert.equal((await s.post('/api/cmd', { type: 'start' }, { origin: `http://127.0.0.1:${s.port}` })).status, 200);
 });

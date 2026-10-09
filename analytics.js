@@ -26,6 +26,8 @@ function aggregate(records, packs) {
         audienceGames: withAudience.length,
         audienceAgreeRate: withAudience.length ? round(withAudience.filter(j => j.audience.leader === j.optionId).length / withAudience.length, 2) : null,
         audienceBestRate: withAudience.length ? round(withAudience.filter(j => j.audience.leader === best.id).length / withAudience.length, 2) : null,
+        // Заметки ведущих с прогонов — свежие первыми (записи архива уже отсортированы по времени, новые сверху).
+        notes: games.map(g => g.session.notes && g.session.notes[st.id] ? { team: g.session.team, text: g.session.notes[st.id] } : null).filter(Boolean).slice(0, 10),
       };
     });
     const traps = [];

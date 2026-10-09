@@ -10,7 +10,7 @@ const { aggregate } = require('./analytics.js');
 const ROOT = __dirname;
 const HEARTBEAT_MS = 25000; // прокси и мобильные сети рвут молчащий SSE через 30–60 с
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2' };
-const GM_CMDS = ['team', 'start', 'discussion', 'voting', 'revote', 'vote', 'reveal', 'next', 'finish', 'undo', 'release', 'reset', 'shuffle', 'sound', 'joinCode'];
+const GM_CMDS = ['team', 'start', 'discussion', 'voting', 'revote', 'vote', 'reveal', 'next', 'finish', 'undo', 'release', 'reset', 'shuffle', 'sound', 'joinCode', 'note'];
 const ROOM_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const MAX_ROOMS = 20;
 const CODE_RE = /^[A-Za-z0-9]{4,12}$/;
@@ -19,6 +19,11 @@ const FAIL_MAX = 10, FAIL_WINDOW_MS = 10 * 60 * 1000, FAIL_TABLE_MAX = 10000;
 const AUDIENCE_PER_IP = 50;          // голосов зала с одного адреса за шаг: зал за одним NAT проходит, скрипт — нет
 const SSE_PER_IP = 200, SSE_TOTAL = 3000; // потолок потоков: дешёвый DoS сотнями соединений не проходит
 const AUDIENCE_BROADCAST_MS = 300;   // голоса зала рассылаются пачкой, а не на каждый голос
+// Секреты — в cookie, а не в адресе: адреса SSE-потоков попадают в журналы прокси.
+const GM_COOKIE = 'incw_gm', DEVICE_COOKIE = 'incw_dev';
+const GM_SESSION_MS = 12 * 60 * 60 * 1000, DEVICE_MS = 30 * 24 * 60 * 60 * 1000;
+const TOKEN_RE = /^[\w-]{8,64}$/;   // переносимый старый токен телефона
+const COOKIE_TOKEN_RE = /^[\w-]{1,64}$/;
 // Политика безопасности: всё своё, без внешних скриптов и встраивания в чужие страницы.
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
@@ -193,13 +198,34 @@ function makeServer(opts = {}) {
 
   const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
   const TOO_MANY = { error: 'Слишком много неверных попыток. Подождите 10 минут.' };
-  // Проверка ведущего с учётом блокировки; при отказе сама отвечает и возвращает false.
-  function gmGuard(req, res, given) {
-    if (!GM_PIN) return true;
+
+  /* ---------- Cookie: сессия ведущего и токен устройства ---------- */
+  const cookies = req => Object.fromEntries(String(req.headers.cookie || '').split(';').map(x => x.trim().split('=')).filter(x => x.length === 2).map(([k, v]) => [k, decodeURIComponent(v)]));
+  const secureReq = req => !!tls || (TRUST_PROXY && req.headers['x-forwarded-proto'] === 'https');
+  const cookieStr = (req, name, value, maxAgeMs, sameSite) => `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=${Math.floor(maxAgeMs / 1000)}` + (secureReq(req) ? '; Secure' : '');
+  const gmSessions = new Map(); // id → истекает (мс); в памяти: рестарт сервера просит PIN заново
+  function gmSession(req) {
+    const id = cookies(req)[GM_COOKIE], exp = id && gmSessions.get(id);
+    if (!exp) return false;
+    if (Date.now() > exp) { gmSessions.delete(id); return false; }
+    return true;
+  }
+  // Токен устройства — из cookie; из тела запроса — только для API-клиентов без cookie (тесты, скрипты).
+  function deviceOf(req, body) {
+    const c = cookies(req)[DEVICE_COOKIE];
+    if (c && COOKIE_TOKEN_RE.test(c)) return c;
+    return body && typeof body.token === 'string' ? body.token : null;
+  }
+
+  // Проверка ведущего: действующая сессия (cookie) или верный PIN в заголовке x-gm-pin.
+  // Перебор PIN блокируется; запрос без PIN и без сессии — просто 401, это не попытка перебора.
+  function gmGuard(req, res) {
+    if (!GM_PIN || gmSession(req)) return true;
+    const given = req.headers['x-gm-pin'];
     const key = 'pin:' + ipOf(req);
-    if (blocked(key)) { json(res, 429, TOO_MANY); return false; }
-    if (pinOk(given)) return true;
-    failed(key); log('отказ: неверный PIN', ipOf(req));
+    if (given !== undefined && blocked(key)) { json(res, 429, TOO_MANY); return false; }
+    if (given !== undefined && pinOk(given)) return true;
+    if (given !== undefined) { failed(key); log('отказ: неверный PIN', ipOf(req)); }
     json(res, 401, { error: 'Нужен PIN ведущего' });
     return false;
   }
@@ -260,7 +286,31 @@ function makeServer(opts = {}) {
     const roomId = u.searchParams.get('room') || 'main';
     const room = rooms.get(roomId);
 
-    if (p === '/api/auth') { if (gmGuard(req, res, req.headers['x-gm-pin'])) json(res, 200, { ok: true }); return; }
+    if (p === '/api/auth') {
+      if (!gmGuard(req, res)) return;
+      // Верный PIN обменивается на cookie сессии: дальше PIN не ходит по сети и не лежит в браузере.
+      if (GM_PIN && req.headers['x-gm-pin'] !== undefined) {
+        const id = crypto.randomBytes(24).toString('hex');
+        gmSessions.set(id, Date.now() + GM_SESSION_MS);
+        res.setHeader('set-cookie', cookieStr(req, GM_COOKIE, id, GM_SESSION_MS, 'Strict'));
+      }
+      return json(res, 200, { ok: true });
+    }
+    if (p === '/api/logout' && req.method === 'POST') {
+      gmSessions.delete(cookies(req)[GM_COOKIE]);
+      res.setHeader('set-cookie', cookieStr(req, GM_COOKIE, '', 0, 'Strict'));
+      return json(res, 200, { ok: true });
+    }
+    // Токен устройства: выдаётся сервером в HttpOnly-cookie. Старый токен из localStorage телефона можно
+    // перенести (body.token), чтобы занятая до обновления роль не потерялась.
+    if (p === '/api/device' && req.method === 'POST') {
+      return readBody(req, body => {
+        if (cookies(req)[DEVICE_COOKIE] && COOKIE_TOKEN_RE.test(cookies(req)[DEVICE_COOKIE])) return json(res, 200, { ok: true });
+        const t = body && TOKEN_RE.test(String(body.token || '')) ? body.token : crypto.randomBytes(12).toString('hex');
+        res.setHeader('set-cookie', cookieStr(req, DEVICE_COOKIE, t, DEVICE_MS, 'Lax'));
+        json(res, 200, { ok: true });
+      });
+    }
 
     if (p === '/api/info') {
       if (!room) return json(res, 404, { error: 'Нет такой комнаты' });
@@ -273,11 +323,11 @@ function makeServer(opts = {}) {
       if (!room) return json(res, 404, { error: 'Нет такой комнаты' });
       const audience = u.searchParams.get('view');
       if (!['screen', 'play', 'gm'].includes(audience)) return json(res, 400, { error: 'view: screen | play | gm' });
-      if (audience === 'gm' && !gmGuard(req, res, u.searchParams.get('pin'))) return;
+      if (audience === 'gm' && !gmGuard(req, res)) return;
       const ip = ipOf(req);
       if (clients.size >= SSE_TOTAL || [...clients].filter(x => x.ip === ip).length >= SSE_PER_IP) return json(res, 503, { error: 'Слишком много подключений' });
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'x-accel-buffering': 'no' });
-      const c = { res, room, audience, ip, role: u.searchParams.get('role'), token: u.searchParams.get('token') };
+      const c = { res, room, audience, ip, role: u.searchParams.get('role'), token: deviceOf(req, null) };
       clients.add(c); send(c);
       const hb = setInterval(() => res.write(': ping\n\n'), HEARTBEAT_MS); hb.unref();
       req.on('close', () => { clearInterval(hb); clients.delete(c); });
@@ -285,8 +335,12 @@ function makeServer(opts = {}) {
     }
 
     if (req.method === 'POST' && ['/api/claim', '/api/vote', '/api/audience', '/api/cmd', '/api/rooms'].includes(p)) {
+      // Защита от подделки запросов с чужих сайтов: POST принимается только со своего origin.
+      const origin = req.headers.origin;
+      if (origin && origin !== 'null') { let host = ''; try { host = new URL(origin).host; } catch (e) { /* битый Origin */ } if (host !== req.headers.host) return json(res, 403, { error: 'Чужой источник запроса' }); }
       return readBody(req, body => {
         if (!body) return json(res, 400, { error: 'Тело запроса — JSON-объект' });
+        body.token = deviceOf(req, body);
         if (p === '/api/rooms') return manageRooms(req, res, body);
         if (!room) return json(res, 404, { error: 'Нет такой комнаты' });
         const r = room;
@@ -318,7 +372,7 @@ function makeServer(opts = {}) {
           if (Object.keys(r.session.audience || {}).length > before) r.audienceIps.set(ip, n + 1);
           return;
         }
-        if (!gmGuard(req, res, req.headers['x-gm-pin'])) return;
+        if (!gmGuard(req, res)) return;
         if (!GM_CMDS.includes(body.type)) return json(res, 400, { error: 'Неизвестная команда' });
         return exec(res, r, body, 'ведущий');
       });
@@ -326,7 +380,7 @@ function makeServer(opts = {}) {
 
     // Только ведущему: полный пак (карточки для печати), архив, аналитика.
     if (p === '/api/pack' || p === '/api/analytics' || p === '/archive' || p.startsWith('/archive/')) {
-      if (!gmGuard(req, res, req.headers['x-gm-pin'])) return;
+      if (!gmGuard(req, res)) return;
       if (p === '/api/pack') return json(res, 200, packById(u.searchParams.get('id') || (room ? room.pack.meta.id : '')) || packs[0]);
       const recs = readArchive();
       if (p === '/api/analytics') return json(res, 200, aggregate(recs, packs));
@@ -341,7 +395,7 @@ function makeServer(opts = {}) {
   };
 
   function manageRooms(req, res, body) {
-    if (!gmGuard(req, res, req.headers['x-gm-pin'])) return;
+    if (!gmGuard(req, res)) return;
     const id = String(body.id || '').trim().toLowerCase();
     if (body.action === 'create') {
       if (!ROOM_RE.test(id)) return json(res, 400, { error: 'Имя комнаты — латиница, цифры и дефис, до 32 символов' });

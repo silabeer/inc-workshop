@@ -3,11 +3,12 @@
   'use strict';
   const { h, mount, plural, signed, mmss, rub, PHASES, timer, verdictTag, store, post, toast, copy } = UI;
 
-  let pin = store.get('incw-pin') || '';
+  // PIN обменивается на HttpOnly-cookie сессии (/api/auth): в браузере и в адресах он больше не хранится.
+  store.del('incw-pin'); // остаток версий до 2.2
   let es = null, last = null, pending = null;
 
   async function send(type, extra) {
-    const r = await post('/api/cmd', Object.assign({ type }, extra || {}), { 'x-gm-pin': pin });
+    const r = await post('/api/cmd', Object.assign({ type }, extra || {}));
     if (r.status === 401) askPin('PIN не подошёл');
     return r.ok;
   }
@@ -16,13 +17,11 @@
   /* ---------- PIN ---------- */
   function askPin(err) {
     if (es) { es.close(); es = null; }
-    store.del('incw-pin');
     const input = h('input', { type: 'password', inputmode: 'numeric', autocomplete: 'off', 'aria-label': 'PIN ведущего' });
     const go = async e => {
       e.preventDefault();
-      pin = input.value.trim();
-      const r = await fetch('/api/auth', { headers: { 'x-gm-pin': pin } });
-      if (r.ok) { store.set('incw-pin', pin); open(); } else askPin(r.status === 429 ? 'Слишком много неверных попыток. Подождите 10 минут.' : 'PIN не подошёл');
+      const r = await fetch('/api/auth', { headers: { 'x-gm-pin': input.value.trim() } });
+      if (r.ok) open(); else askPin(r.status === 429 ? 'Слишком много неверных попыток. Подождите 10 минут.' : 'PIN не подошёл');
     };
     mount('gmBody', h('form', { class: 'g-pin panel g-form', onsubmit: go },
       h('h2', null, 'Пульт ведущего'),
@@ -66,7 +65,7 @@
         h('button', { class: 'btn danger', onclick: () => confirmSend('Начать новую партию? Текущая уйдёт в архив; команда и роли сохранятся.', 'reset', { scenarioId: sel.value }) }, 'Новая партия'),
         v.room !== 'main' ? h('button', { class: 'btn danger', onclick: async () => {
           if (!confirm('Удалить комнату ' + v.room + '? Партия уйдёт в архив, телефоны отключатся.')) return;
-          const r = await post('/api/rooms', { action: 'delete', id: v.room }, { 'x-gm-pin': pin });
+          const r = await post('/api/rooms', { action: 'delete', id: v.room });
           if (r.ok) location.href = '/#gm';
         } }, 'Удалить комнату') : null));
   }
@@ -77,6 +76,7 @@
       h('a', { href: UI.BASE + '#cards', target: '_blank' }, 'Карточки ролей для печати'),
       h('a', { href: UI.BASE + '#stats', target: '_blank' }, 'Аналитика по архиву'),
       h('span', null, 'Телефоны: ' + location.host + UI.BASE + '#play'),
+      v.gmPin ? h('a', { href: '#', onclick: async e => { e.preventDefault(); await post('/api/logout', {}); location.reload(); } }, 'Выйти с пульта') : null,
       v.gmPin ? null : h('span', { class: 'note-warn' }, 'Пульт без PIN: защитите — GM_PIN=4821 npm start'));
   }
 
@@ -95,7 +95,7 @@
   function roomsPanel(v) {
     const name = h('input', { maxlength: 32, autocomplete: 'off', placeholder: 'stol-2', 'aria-label': 'Имя новой комнаты' });
     const create = async () => {
-      const r = await post('/api/rooms', { action: 'create', id: name.value, scenarioId: v.scenarioId }, { 'x-gm-pin': pin });
+      const r = await post('/api/rooms', { action: 'create', id: name.value, scenarioId: v.scenarioId });
       if (r.ok) toast('Комната ' + r.data.id + ' создана');
     };
     return h('div', { class: 'panel g-form' }, h('h3', null, 'Комнаты: параллельные столы'),
@@ -201,6 +201,16 @@
       }));
   }
 
+  // Заметка к шагу: что заметили на прогоне (кто промолчал, что сбило, где раскололось голосование).
+  // Видна только ведущему, попадает в отчёт, архив и аналитику по архиву.
+  function notePanel(v) {
+    const ta = h('textarea', { class: 'g-note', rows: 3, maxlength: 1000, 'aria-label': 'Заметка к шагу', placeholder: 'Что заметили на этом шаге: кто молчал, что сбило, почему раскололись' }, v.notes[v.step.id] || '');
+    const save = () => send('note', { stepId: v.step.id, text: ta.value }).then(ok => ok && toast('Заметка сохранена'));
+    return h('div', { class: 'panel g-form' }, h('h3', null, 'Заметка ведущего к шагу'), ta,
+      h('div', { class: 'g-actions' }, h('button', { class: 'btn small', onclick: save }, 'Сохранить заметку'),
+        h('span', { class: 'muted' }, 'В отчёт и аналитику по архиву; залу не видна.')));
+  }
+
   function stepView(v) {
     return h('div', { class: 'g-grid' },
       h('div', { class: 'g-col' },
@@ -209,6 +219,7 @@
         h('div', { class: 'panel' }, h('h3', null, 'Раунд'), roundControls(v)),
         votesPanel(v),
         optionsPanel(v),
+        notePanel(v),
         v.upcoming.length ? h('p', { class: 'muted' }, 'Дальше: ' + v.upcoming.join(' → ')) : null),
       h('div', { class: 'g-col' }, privatePanel(v), seatsPanel(v), links(v), dangerZone(v)));
   }
@@ -227,6 +238,8 @@
           h('ol', null, s.steps.slice().sort((a, b) => b.sec - a.sec).map(x => h('li', null, h('b', null, x.title), ' — ' + mmss(x.sec) + '. ' + x.label + ' (' + x.verdict.label.toLowerCase() + ')' + (x.isBest ? '' : '. Лучше: ' + x.bestLabel))))) : null),
       h('div', { class: 'g-col' },
         s ? h('div', { class: 'panel g-final' }, h('h3', null, 'Вопросы залу'), h('ol', null, s.debriefQuestions.map(q => h('li', null, q)))) : null,
+        Object.keys(v.notes).length ? h('div', { class: 'panel g-final' }, h('h3', null, 'Ваши заметки по шагам'),
+          h('ul', null, v.stepTitles.filter(st => v.notes[st.id]).map(st => h('li', null, h('b', null, st.title + ': '), v.notes[st.id])))) : null,
         dangerZone(v)));
   }
 
@@ -235,7 +248,7 @@
     const body = v.phase === 'lobby' ? lobby(v) : v.phase === 'end' ? finalView(v) : stepView(v);
     // Не перерисовываем, пока ведущий печатает название команды: иначе ввод собьётся.
     const a = document.activeElement;
-    if (a && a.tagName === 'INPUT' && a.type !== 'checkbox' && a.value !== a.defaultValue && document.getElementById('gm').contains(a)) { pending = v; last = v; return; }
+    if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && a.type !== 'checkbox' && a.value !== a.defaultValue && document.getElementById('gm').contains(a)) { pending = v; last = v; return; }
     mount('gmBody', bar(v), body);
   }
 
@@ -245,9 +258,9 @@
   function open() {
     if (es) es.close();
     // Поток закрыт сервером: PIN сменили (спросим заново) или комнату удалили (уходим на основную).
-    es = UI.connect({ view: 'gm', pin }, render, async () => {
-      const a = await fetch('/api/auth', { headers: { 'x-gm-pin': pin } }).catch(() => null);
-      if (a && (a.status === 401 || a.status === 429)) return askPin(a.status === 429 ? 'Слишком много неверных попыток. Подождите 10 минут.' : 'PIN сменился — введите новый');
+    es = UI.connect({ view: 'gm' }, render, async () => {
+      const a = await fetch('/api/auth').catch(() => null);
+      if (a && (a.status === 401 || a.status === 429)) return askPin(a.status === 429 ? 'Слишком много неверных попыток. Подождите 10 минут.' : 'Сессия ведущего истекла или сервер перезапущен — введите PIN');
       const i = await fetch(UI.api('/api/info')).catch(() => null);
       if (i && i.status === 404) { location.href = '/#gm'; return; }
       setTimeout(open, 3000);
@@ -256,8 +269,8 @@
 
   async function start() {
     document.title = 'Пульт ведущего — инцидент-тренировка';
-    const r = await fetch('/api/auth', { headers: { 'x-gm-pin': pin } }).catch(() => null);
-    if (r && r.status === 401) askPin(pin ? 'PIN не подошёл' : '');
+    const r = await fetch('/api/auth').catch(() => null);
+    if (r && r.status === 401) askPin('');
     else open();
     document.addEventListener('keydown', e => {
       if (e.code === 'KeyT' && !(e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName))) UI.toggleTheme();
@@ -267,7 +280,7 @@
   /* ---------- Карточки ролей для бумажного режима ---------- */
   async function cards() {
     document.title = 'Карточки ролей — инцидент-тренировка';
-    const r = await fetch(UI.api('/api/pack'), { headers: { 'x-gm-pin': pin } });
+    const r = await fetch(UI.api('/api/pack'));
     if (!r.ok) { mount('cardsBody', h('p', { class: 'panel' }, 'Откройте сначала пульт ведущего (#gm) и введите PIN — карточки доступны только ведущему.')); return; }
     const p = await r.json();
     mount('cardsBody',
@@ -287,7 +300,7 @@
   const pct = x => (x === null ? '—' : Math.round(x * 100) + '%');
   async function stats() {
     document.title = 'Аналитика — инцидент-тренировка';
-    const r = await fetch('/api/analytics', { headers: { 'x-gm-pin': pin } });
+    const r = await fetch('/api/analytics');
     if (!r.ok) { mount('statsBody', h('p', { class: 'panel' }, 'Откройте сначала пульт ведущего (#gm) и введите PIN — аналитика доступна только ведущему.')); return; }
     const data = await r.json();
     if (!data.length) { mount('statsBody', h('h1', null, 'Аналитика по архиву'), h('p', { class: 'panel', style: 'margin-top:1rem' }, 'В архиве пока нет сыгранных партий. Партия попадает в архив, когда доходит до итогов или когда ведущий начинает новую.')); return; }
@@ -307,7 +320,10 @@
           h('thead', null, h('tr', null, ['Шаг', 'Сыграно', 'Лучший ход', 'Ловушка', 'Время', 'Зал совпал с ролями'].map(t => h('th', null, t)))),
           h('tbody', null, c.steps.map(st => h('tr', null,
             h('td', null, st.title), h('td', null, String(st.played)), h('td', null, pct(st.bestRate)), h('td', null, pct(st.trapRate)),
-            h('td', null, st.avgSec === null ? '—' : mmss(st.avgSec)), h('td', null, st.audienceGames ? pct(st.audienceAgreeRate) : '—'))))))));
+            h('td', null, st.avgSec === null ? '—' : mmss(st.avgSec)), h('td', null, st.audienceGames ? pct(st.audienceAgreeRate) : '—'))))),
+        c.steps.some(st => st.notes.length) ? h('div', { class: 'st-notes' }, h('h3', null, 'Заметки ведущих с прогонов'),
+          c.steps.filter(st => st.notes.length).map(st => h('div', null, h('b', null, st.title),
+            h('ul', null, st.notes.map(n => h('li', null, n.text, h('span', { class: 'muted' }, ' — ' + n.team))))))) : null)));
   }
 
   window.GM = { start, cards, stats };

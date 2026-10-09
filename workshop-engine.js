@@ -147,6 +147,7 @@
       journal: [],
       seats,
       audience: {},   // голоса зала на текущем шаге: {токен устройства: вариант}; на решение не влияют
+      notes: {},      // заметки ведущего по шагам: {stepId: текст} — для разбора и правки кейса после прогона
       sound: !!opts.sound,
       phaseAt: null, stepAt: null, startedAt: null, endedAt: null,
       history: [],
@@ -156,7 +157,7 @@
   // Снимок для отката: всё, кроме истории, мест и настроек (освобождённая роль не должна «вернуться» по undo).
   function snapshot(state) {
     const s = JSON.parse(JSON.stringify(state));
-    delete s.history; delete s.seats; delete s.sound; delete s.audience; // голоса зала — сотни токенов, в снимках не нужны
+    delete s.history; delete s.seats; delete s.sound; delete s.audience; delete s.notes; // голоса зала — сотни токенов, в снимках не нужны
     return s;
   }
   function withHistory(state, next) {
@@ -226,6 +227,14 @@
       }
       case 'sound': {
         s.sound = !!cmd.on;
+        return s;
+      }
+      case 'note': {
+        // Заметка ведущего к шагу (пустая — удалить). Откатом не отменяется, как и места ролей.
+        if (!pack.steps.some(x => x.id === cmd.stepId)) fail('Нет такого шага');
+        const text = String(cmd.text || '').trim().slice(0, 1000);
+        s.notes = Object.assign({}, s.notes);
+        if (text) s.notes[cmd.stepId] = text; else delete s.notes[cmd.stepId];
         return s;
       }
       case 'team': {
@@ -314,7 +323,7 @@
         if (!s.history.length) fail('Откатывать нечего');
         const prev = s.history[s.history.length - 1];
         // Голоса зала текущего шага переживают откат внутри шага (например, отмену раскрытия).
-        return Object.assign(clone(prev), { seats: s.seats, sound: s.sound, audience: prev.stepIndex === s.stepIndex ? s.audience || {} : {}, history: s.history.slice(0, -1) });
+        return Object.assign(clone(prev), { seats: s.seats, sound: s.sound, audience: prev.stepIndex === s.stepIndex ? s.audience || {} : {}, notes: s.notes || {}, history: s.history.slice(0, -1) });
       }
       default:
         fail('Неизвестная команда');
@@ -365,6 +374,11 @@
       + (x.audience && x.audience.leaderLabel && !x.audience.agree ? `. Зал (${x.audience.total}) выбрал бы: ${x.audience.leaderLabel}` : '')));
     lines.push('', '## Дольше всего думали', '');
     s.steps.slice().sort((a, b) => b.sec - a.sec).slice(0, 3).forEach(x => lines.push(`- ${x.title} — ${mmss(x.sec)}`));
+    const notes = pack.steps.filter(st => state.notes && state.notes[st.id]);
+    if (notes.length) {
+      lines.push('', '## Заметки ведущего', '');
+      notes.forEach(st => lines.push(`- **${st.title}:** ${state.notes[st.id].replace(/\s*\n\s*/g, ' ')}`));
+    }
     lines.push('', '## Причина', '', pack.end.rootCause, '', '## Вопросы для разбора', '');
     pack.end.debriefQuestions.forEach(q => lines.push(`- ${q}`));
     return lines.join('\n');
@@ -441,7 +455,8 @@
         votes: state.votes, tally: step ? tally(pack, state) : null, audience: step ? tallyAudience(pack, state) : null,
         sound: !!state.sound,
         score: state.score, maxScore: maxScore(pack), metrics: state.metrics, moneyLimit: pack.meta.moneyLimit,
-        canUndo: state.history.length > 0, journal: state.journal,
+        canUndo: state.history.length > 0, journal: state.journal, notes: state.notes || {},
+        stepTitles: pack.steps.map(x => ({ id: x.id, title: x.title })),
         upcoming: pack.steps.slice(state.stepIndex + 1).map(x => x.title),
         summary: state.journal.length ? publicSummary(pack, state) : null,
         report: state.phase === 'end' ? report(pack, state) : null,

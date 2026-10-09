@@ -15,6 +15,7 @@
   - QR-код в лобби читается декодером и ведёт на адрес для телефонов;
   - ничья (с голосом Командира и без), бумажный режим (голоса вписывает ведущий), голос зала;
   - комнаты, код входа, звук, аналитика по архиву;
+  - вход ведущего по PIN: сессия в cookie, PIN и токены не попадают в адреса запросов и в localStorage;
   - в консоли нет ошибок.
 """
 import os
@@ -26,6 +27,7 @@ import zxingcpp
 from PIL import Image
 
 BASE = os.environ['UI_BASE']  # задаёт run.js: свой сервер на свободном порту
+BASE_PIN, PIN = os.environ['UI_BASE_PIN'], os.environ['UI_PIN']  # второй сервер — с PIN ведущего
 OUT = os.path.join(os.path.dirname(__file__), 'out')
 os.makedirs(OUT, exist_ok=True)
 failures = []
@@ -269,6 +271,12 @@ def run():
             contrast(small, f'проектор 720p/{theme}')
             small.close()
 
+        # ---------- Заметка ведущего к шагу ----------
+        gm.fill('textarea.g-note', 'Скаут не прочитал срез — зал хотел рестарт')
+        gm.get_by_role('button', name='Сохранить заметку').click()
+        wait_text(gm, 'Заметка сохранена')
+        check('Скаут не прочитал срез' not in proj.inner_text('body'), 'заметка ведущего видна на проекторе')
+
         # ---------- Шаг 2: ничья без голоса Командира — выбирает ведущий ----------
         print('Ничья и бумажный режим')
         api(gm, '/api/cmd', {'type': 'voting'})
@@ -325,6 +333,7 @@ def run():
         stats = new_page(1280, 900)
         stats.goto(BASE + '/#stats')
         stats.wait_for_selector('.st-table')
+        wait_text(stats, 'Скаут не прочитал срез')  # заметка дошла до аналитики по архиву
         shot(stats, 'stats', full=True)
         contrast(stats, 'аналитика')
         english(stats, 'аналитика')
@@ -358,6 +367,42 @@ def run():
         phc.locator('.p-roles button', has_text='Связной').click()
         wait_text(phc, 'Ваша миссия')
         wait_text(rp, '1 из 5')
+
+        # ---------- Сервер с PIN: вход ведущего и секреты вне адресов ----------
+        print('PIN ведущего')
+        urls = []
+        g2 = browser.new_page(viewport={'width': 1280, 'height': 900})
+        g2.on('request', lambda r: urls.append(r.url))
+        g2.goto(BASE_PIN + '/#gm')
+        g2.wait_for_selector('.g-pin input')
+        shot(g2, 'gm-pin')
+        contrast(g2, 'пульт/PIN')
+        g2.fill('.g-pin input', '0000')
+        g2.get_by_role('button', name='Открыть пульт').click()
+        wait_text(g2, 'PIN не подошёл')
+        g2.fill('.g-pin input', PIN)
+        g2.get_by_role('button', name='Открыть пульт').click()
+        g2.wait_for_selector('.g-cases')
+        g2.reload()
+        g2.wait_for_selector('.g-cases', timeout=5000)  # сессия в cookie переживает перезагрузку
+        stored = g2.evaluate('JSON.stringify(Object.assign({}, localStorage))')
+        check(PIN not in stored, f'PIN лежит в localStorage: {stored}')
+        cookie = [c for c in g2.context.cookies() if c['name'] == 'incw_gm']
+        check(cookie and cookie[0]['httpOnly'] and cookie[0]['sameSite'] == 'Strict', f'cookie сессии ведущего: {cookie}')
+        p2 = browser.new_page(viewport={'width': 390, 'height': 844})
+        p2.on('request', lambda r: urls.append(r.url))
+        p2.goto(BASE_PIN + '/#play')
+        p2.wait_for_selector('.p-roles')
+        p2.locator('.p-roles button', has_text='Скаут').click()
+        wait_text(p2, 'Ваша миссия')
+        p2.reload()
+        wait_text(p2, 'Ваша миссия')  # роль вернулась по cookie устройства
+        dev = [c for c in p2.context.cookies() if c['name'] == 'incw_dev']
+        check(dev and dev[0]['httpOnly'], f'cookie устройства: {dev}')
+        leaks = [u for u in urls if 'pin=' in u or 'token=' in u or (dev and dev[0]['value'] in u)]
+        check(not leaks, f'секреты в адресах запросов: {leaks[:3]}')
+        g2.get_by_role('link', name='Выйти с пульта').click()
+        g2.wait_for_selector('.g-pin input')
 
         check(not errors, f'ошибки в консоли: {errors[:5]}')
         browser.close()
