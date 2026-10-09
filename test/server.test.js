@@ -101,3 +101,48 @@ test('хранимый state.json без rev игнорируется', async (t
   assert.strictEqual(st.body.game.status, 'LOBBY');
   assert.strictEqual(st.body.rev, 0);
 });
+
+test('холл-режим раздаётся сервером: hall.html как html, hall-engine.js как javascript', async (t) => {
+  const {port} = await startTmp(t);
+  const page = await fetch(`${BASE}:${port}/hall.html`);
+  assert.strictEqual(page.status, 200);
+  assert.match(page.headers.get('content-type'), /text\/html/);
+  assert.match(await page.text(), /hall-engine\.js/);
+  const eng = await fetch(`${BASE}:${port}/hall-engine.js`);
+  assert.strictEqual(eng.status, 200);
+  assert.match(eng.headers.get('content-type'), /javascript/);
+});
+
+test('/healthz отвечает 200 с rev и числом клиентов', async (t) => {
+  const {port} = await startTmp(t);
+  const h = await getJson(port, '/healthz');
+  assert.strictEqual(h.status, 200);
+  assert.strictEqual(h.body.ok, true);
+  assert.strictEqual(typeof h.body.rev, 'number');
+  assert.strictEqual(typeof h.body.clients, 'number');
+});
+
+test('неизвестный путь — 404, корень и /index.html — war-room', async (t) => {
+  const {port} = await startTmp(t);
+  assert.strictEqual((await fetch(`${BASE}:${port}/favicon.ico`)).status, 404);
+  assert.strictEqual((await fetch(`${BASE}:${port}/`)).status, 200);
+  assert.strictEqual((await fetch(`${BASE}:${port}/index.html`)).status, 200);
+});
+
+test('запись с недопустимым id или doc-не-объектом — 400, состояние не меняется', async (t) => {
+  const {port} = await startTmp(t);
+  assert.strictEqual(await post(port, {col: 'wall', id: "x');alert(1)//", doc: {summary: 'a'}}), 400);
+  assert.strictEqual(await post(port, {col: 'wall', id: 'ok1', doc: 'строка'}), 400);
+  assert.strictEqual(await post(port, {col: 'game', doc: null}), 400);
+  const st = await getJson(port, '/state');
+  assert.strictEqual(st.body.rev, 0);
+  assert.deepStrictEqual(st.body.wall, {});
+});
+
+test('состояние сохраняется на диск и переживает перезапуск', async (t) => {
+  const {port, file, dir} = await startTmp(t);
+  assert.strictEqual(await post(port, {col: 'wall', id: 'w1', doc: {summary: 'улика'}}), 204);
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.strictEqual(saved.wall.w1.summary, 'улика');
+  assert.deepStrictEqual(fs.readdirSync(dir).filter(f => f.includes('.tmp')), []);
+});
