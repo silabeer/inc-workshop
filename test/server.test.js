@@ -154,3 +154,22 @@ test('успешная запись возвращает новый rev в за�
   assert.strictEqual(r.status, 204);
   assert.strictEqual(r.headers.get('x-rev'), '1');
 });
+
+test('PIN ведущего: game и reset без верного x-gm-pin — 401, коллекции игроков открыты', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pn-pin-'));
+  fs.writeFileSync(path.join(dir, 'war-room.html'), '<html></html>');
+  const {makeServer} = require('../server.js');
+  const srv = makeServer({file: path.join(dir, 'state.json'), archiveDir: path.join(dir, 'a'), html: path.join(dir, 'war-room.html'), gmPin: '4242'});
+  await new Promise(res => srv.listen(0, '127.0.0.1', res));
+  t.after(() => srv.close());
+  const port = srv.address().port;
+  const write = (op, pin) => fetch(`${BASE}:${port}/write`, {method: 'POST',
+    headers: Object.assign({'content-type': 'application/json'}, pin ? {'x-gm-pin': pin} : {}), body: JSON.stringify(op)}).then(r => r.status);
+  assert.strictEqual(await write({col: 'game', doc: {status: 'ACTIVE'}}), 401);
+  assert.strictEqual(await write({col: 'game', doc: {status: 'ACTIVE'}}, '0000'), 401);
+  assert.strictEqual(await write({reset: true}), 401);
+  assert.strictEqual(await write({col: 'players', id: 'scout', doc: {name: 'Аня'}}), 204);
+  assert.strictEqual(await write({col: 'game', doc: {status: 'ACTIVE'}}, '4242'), 204);
+  const h = await getJson(port, '/healthz');
+  assert.strictEqual(h.body.gmPin, true);
+});

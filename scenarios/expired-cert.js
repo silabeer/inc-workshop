@@ -180,7 +180,7 @@ TLS / сетевое / конфиг   не тронуты`},
   mitigations: [
     {id:'M-P1',role:'platform',title:'Обновить сертификат edge по ранбуку (новый серт, nginx -s reload)',cost:90,review:true,hint:'Лечение. Деньги горят, пока серт ставится. Нужна K1.'},
     {id:'M-P2',role:'platform',title:'Аварийный сертификат из vault-архива (на 30 дней)',cost:45,review:true,hint:'Быстро, но костыль: Resolved с оговоркой. Нужна K4 или D3.'},
-    {id:'T-ROLL',role:'domain',title:'Откатить api-service на v1.9.1',cost:60,review:false,trap:true,hint:'Вчерашний релиз под подозрением.'},
+    {id:'T-ROLL',role:'domain',title:'Откатить api-service на v1.9.1',cost:60,review:false,reversible:true,hint:'Вчерашний релиз под подозрением. Обратимо: можно без улик, но сначала сверьте время сбоя с временем релиза.'},
     {id:'T-RESTART',role:'platform',title:'Rolling restart api-service и edge',cost:60,review:false,trap:true,trapDelta:1,hint:'Поды встанут здоровыми, серт всё тот же.'},
     {id:'T-INSECURE',role:'domain',title:'Перевести edge на http / отключить проверку сертификата',cost:30,review:true,trap:true,hint:'Pinning и HSTS: не сработает. ИБ взорвётся.'},
     {id:'T-SCALE',role:'platform',title:'Масштабировать api-service 8 → 16',cost:45,review:false,trap:true,trapDelta:1,hint:'Трафик до приложения не доходит.'},
@@ -250,10 +250,10 @@ TLS / сетевое / конфиг   не тронуты`},
 Приложение 6.2 с TLS pinning — обхода нет.
 
 Победа: M-P1 (новый серт по ранбуку, 90 с) или M-P2 (аварийный из vault, 45 с, костыль на 30 дней).
-Ловушки: T-ROLL (релиз не при чём), T-RESTART, T-INSECURE (pinning/HSTS), T-SCALE.
+Ловушки: T-RESTART, T-INSECURE (pinning/HSTS), T-SCALE. T-ROLL — не ловушка, а обратимая мера: тратит 60 с, ничего не меняет, таймлайн снимал её сразу.
 K1 P2 · K2 S1/S2/C2 · K3 S3/D1/D2 · K4 P3/P4
 
-Паника: +1 / 3 мин · +1 тишина > 4 мин · +2 ловушка · +2 вслепую · +1 / 30 с звонка
+Паника: +1 / 3 мин · +1 тишина > 4 мин · +2 ловушка · +2 вслепую (кроме обратимых: T-ROLL) · +1 / 30 с звонка
         −1 ключевая улика (K1–K4) · −1/−2 статус · −2 отбитый звонок · −3 стабилизация
 Звонок CIO — на 2-й минуте, 90 с. Ивент d10 — на 6-й. Стоп на 12-й минуте.
 Победа: ≥95% success 60 секунд. FAILED: 12 мин без стабилизации / паника 20 на 90 с / 3 млн ₽.`,

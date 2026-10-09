@@ -315,7 +315,7 @@ Backoff с jitter лежит в бэклоге с марта. Могу выка�
       apply:(A)=>(A.has('M-D1')||A.has('M-D2')||A.has('M-D2b'))
         ? {set:{cleared:true},msg:'Выполнено M-P4: Rolling restart payment-proxy — горутины сброшены',sev:'success'}
         : {transientSec:30,msg:'Выполнено M-P4: Rolling restart payment-proxy — 30 секунд облегчения, потом снова',sev:'warning'}},
-    {id:'M-P0',role:'platform',title:'Вернуть по манифесту: откатить своё последнее инфра-действие',cost:20,review:false,hint:'Без штрафа к панике. GM снимет эффект.',
+    {id:'M-P0',role:'platform',reversible:true,title:'Вернуть по манифесту: откатить своё последнее инфра-действие',cost:20,review:false,hint:'Без штрафа к панике. GM снимет эффект.',
       apply:(A,g,pack)=>{const infra=[...A].reverse().find(x=>x!=='M-P0'&&(pack.mitigations||[]).some(m=>m.id===x&&m.role==='platform'));
         return infra?{remove:[infra],msg:'Выполнено M-P0 — снято '+infra,sev:'success'}:{msg:'Выполнено M-P0 — откатывать нечего',sev:'info'};}},
     {id:'T-WAF',role:'platform',title:'Зарезать трафик на WAF / rate limit на Envoy',cost:60,review:true,trap:true,hint:'Похоже на DDoS?'},
@@ -323,11 +323,11 @@ Backoff с jitter лежит в бэклоге с марта. Могу выка�
     {id:'T-NOFILE',role:'platform',title:'Поднять nofile до 65 536 и maxThreads',cost:45,review:false,trap:true,hint:'Too many open files исчезнет.'},
     {id:'T-LIVE',role:'platform',title:'Убрать liveness-пробу order-service',cost:30,review:false,trap:true,hint:'Рестарты прекратятся.'},
     {id:'T-SCALE',role:'platform',title:'Масштабировать payment-proxy 3 → 10',cost:60,review:false,trap:true,hint:'Больше подов — больше горутин.'},
-    {id:'T-ROLL',role:'domain',title:'Откатить order-service на v2.40.3',cost:90,review:true,trap:true,hint:'Утренний релиз под подозрением.',
-      apply:()=>({transientSec:30,msg:'Выполнено T-ROLL: Откатить order-service на v2.40.3 — 30 секунд облегчения, ничего не изменилось',sev:'danger'})},
-    {id:'M-D1',role:'domain',title:'Kill-switch: payments.card.enabled=false',cost:30,review:false,hint:'Карта получает вежливый отказ. Зависшее не освобождает.'},
-    {id:'M-D2',role:'domain',title:'payments.card.fallback_acquirer=true',cost:30,review:false,hint:'Эквайер Б, лимит 300 TPS. Без среза ретраев — 429.'},
-    {id:'M-D2b',role:'domain',title:'orders.async_payment=true',cost:30,review:false,hint:'Заказ в PENDING_PAYMENT, списание позже. Клиентам надо объяснить.'},
+    {id:'T-ROLL',role:'domain',title:'Откатить order-service на v2.40.3',cost:90,review:true,reversible:true,hint:'Утренний релиз под подозрением. Обратимо: можно без улик, но время дорогое.',
+      apply:()=>({transientSec:30,msg:'Выполнено T-ROLL: Откатить order-service на v2.40.3 — 30 секунд облегчения, ничего не изменилось: релиз ни при чём',sev:'warning'})},
+    {id:'M-D1',role:'domain',reversible:true,title:'Kill-switch: payments.card.enabled=false',cost:30,review:false,hint:'Карта получает вежливый отказ. Зависшее не освобождает.'},
+    {id:'M-D2',role:'domain',reversible:true,title:'payments.card.fallback_acquirer=true',cost:30,review:false,hint:'Эквайер Б, лимит 300 TPS. Без среза ретраев — 429.'},
+    {id:'M-D2b',role:'domain',reversible:true,title:'orders.async_payment=true',cost:30,review:false,hint:'Заказ в PENDING_PAYMENT, списание позже. Клиентам надо объяснить.'},
     {id:'M-D3',role:'domain',title:'Хотфикс: ACQUIRER_TIMEOUT=3s в payment-proxy + rollout',cost:90,review:true,hint:'Карта падает через 3 с вместо вечности. Частичный эффект.'},
     {id:'M-D4',role:'domain',title:'pg_terminate_backend для idle in transaction',cost:45,review:true,hint:'Освобождает 6 из 10 коннектов на 2 минуты.'},
   ],
@@ -377,7 +377,8 @@ order-service → payment-proxy без SocketTimeout, вызов ВНУТРИ @T
 Победа: M-P1 (срез ретраев) → M-D2 или M-D2b (флаг) → M-P3 (рестарт). Рестарт ДО флага — 30 с облегчения.
 K1 D2/P6 · K2 D4/P10/S5/C4 · K3 D3 · K4 P8/S1/C2 · K5 C1/S3 · K6 S6/S8/P9
 
-Паника: +1 / 4 мин авто · +1 тишина > 5 мин · +2 ловушка · +2 вслепую · +1 / 45 с звонка
+Паника: +1 / 4 мин авто · +1 тишина > 5 мин · +2 ловушка · +2 вслепую (кроме обратимых: флаги, откат, M-P0) · +1 / 45 с звонка
+Откат T-ROLL — не ловушка: законная обратимая мера, просто бесполезная здесь (стоит 90 с).
         −1 ключевая улика · −1/−2 статус · −2 отбитый звонок · −3 стабилизация
 Звонок CIO — на 4-й минуте, 180 с. Ивенты d10 — на 7-й и 15-й.
 Стоп на 22-й минуте. Победа: ≥95% success 90 секунд.`,

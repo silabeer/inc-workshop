@@ -84,3 +84,12 @@ test('пак: таблица ивентов мира — d10 (индексы 1�
     for (const e of we.table.slice(1)) if (e) assert.ok(e.t, `${p.id}: ивент без заголовка t`);
   }
 });
+
+test('пак: откат релиза — обратимая мера, не ловушка; фича-флаги обратимы', () => {
+  for (const p of PACKS) {
+    for (const m of p.mitigations) {
+      if (/^Откатить/.test(m.title)) assert.ok(!m.trap && m.reversible, `${p.id}/${m.id}: откат должен быть reversible и не trap`);
+      if (m.trap) assert.ok(!m.reversible, `${p.id}/${m.id}: ловушка не может быть обратимой «бесплатно»`);
+    }
+  }
+});

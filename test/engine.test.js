@@ -273,3 +273,16 @@ test('eventPatch: эффекты ивента мира — общие для а�
   assert.deepStrictEqual(ENGINE.eventPatch({fx: 'transient'}, now), {patch: {transientUntil: 80000}, panic: 0});
   assert.deepStrictEqual(ENGINE.eventPatch(null, now), {patch: {}, panic: 0});
 });
+
+test('автопилот: обратимое действие (reversible) без улик не штрафуется «вслепую»', () => {
+  const pk = Object.assign({}, apPack, {mitigations: apPack.mitigations.concat([{id: 'M-FLAG', role: 'domain', title: 'Флаг', cost: 30, review: false, reversible: true}])});
+  const st = mkState(mkGame({fired: noCall}), {p1: {mitId: 'M-FLAG', status: 'go', goAt: 0, cards: []}});
+  const plan = ENGINE.planAutopilot(st, pk, 1000 + 30 * 1000, () => 0.99);
+  assert.ok(!plan.patch.panic, 'паника не должна вырасти');
+});
+
+test('автопилот: стабилизация фиксирует mitigatedSec (TTM)', () => {
+  const st = mkState(mkGame({fired: noCall}), {p1: {mitId: 'M-FIX', status: 'go', goAt: 10, cards: ['w1'], reviewedBy: 'scout'}});
+  const plan = run(st, 130);
+  assert.strictEqual(plan.patch.mitigatedSec, 130);
+});

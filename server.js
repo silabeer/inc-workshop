@@ -1,7 +1,7 @@
 // Сервер воркшопа инцидентов. Без зависимостей: node server.js [порт]
 // Отдаёт war-room.html, hall.html и статику движков/пакетов, хранит состояние
 // war-room (с rev для условных записей), рассылает изменения по SSE,
-// архивирует завершённые игры. Окружение: PORT, HOST, DATA_DIR.
+// архивирует завершённые игры. Окружение: PORT, HOST, DATA_DIR, GM_PIN.
 const http=require('http'),fs=require('fs'),path=require('path'),os=require('os');
 const ROOT=__dirname;
 const COLS=['players','wall','hypotheses','proposals','statuses'];
@@ -14,6 +14,10 @@ const HTML=opts.html||path.join(ROOT,'war-room.html');
 const DATA=process.env.DATA_DIR||ROOT; // каталог состояния и архива (в Docker — том)
 const FILE=opts.file||path.join(DATA,'state.json');
 const ARCH=opts.archiveDir||path.join(DATA,'archive');
+// PIN ведущего: если задан, писать game и делать reset можно только с заголовком x-gm-pin.
+// Игроки (players, wall, hypotheses, proposals, statuses) пишут без PIN.
+const GM_PIN=opts.gmPin!==undefined?opts.gmPin:(process.env.GM_PIN||'');
+const log=opts.log?(...a)=>console.log(new Date().toTimeString().slice(0,8),...a.filter(x=>x!==''&&x!=null)):()=>{};
 const STATIC={'/hall.html':path.join(ROOT,'hall.html'),'/engine.js':path.join(ROOT,'engine.js'),'/hall-engine.js':path.join(ROOT,'hall-engine.js')};
 const EMPTY=()=>({rev:0,game:{status:'LOBBY',panic:0,applied:[],rateSegments:[],events:[]},players:{},wall:{},hypotheses:{},proposals:{},statuses:{}});
 let state=EMPTY();try{const raw=JSON.parse(fs.readFileSync(FILE,'utf8'));if(raw&&typeof raw.rev==='number')state=raw;}catch(e){}
@@ -53,7 +57,7 @@ function applyOp(op){
 }
 const server=http.createServer((req,res)=>{
   const u=new URL(req.url,'http://x');
-  if(u.pathname==='/healthz'){res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});return res.end(JSON.stringify({ok:true,rev:state.rev,status:state.game.status,clients:clients.size}));}
+  if(u.pathname==='/healthz'){res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});return res.end(JSON.stringify({ok:true,rev:state.rev,status:state.game.status,clients:clients.size,gmPin:!!GM_PIN}));}
   if(u.pathname==='/state'){res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});return res.end(JSON.stringify(state));}
   if(u.pathname==='/events'){
     res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-store','connection':'keep-alive','x-accel-buffering':'no'});
@@ -61,9 +65,14 @@ const server=http.createServer((req,res)=>{
     const hb=setInterval(()=>res.write(': ping\n\n'),HEARTBEAT_MS);hb.unref();
     req.on('close',()=>{clearInterval(hb);clients.delete(res);});return;}
   if(u.pathname==='/write'&&req.method==='POST'){let b='';req.on('data',d=>{b+=d;if(b.length>1e6)req.destroy();});req.on('end',()=>{try{const op=JSON.parse(b);
-      if(op&&op.expectRev!==undefined&&op.expectRev!==state.rev){res.writeHead(409);return res.end();}
+      if(GM_PIN&&op&&(op.reset||op.col==='game')&&req.headers['x-gm-pin']!==GM_PIN){log('401',op.reset?'reset':'game','неверный PIN');res.writeHead(401);return res.end('gm pin required');}
+      if(op&&op.expectRev!==undefined&&op.expectRev!==state.rev){log('409',op.col||'reset','expectRev',op.expectRev,'rev',state.rev);res.writeHead(409);return res.end();}
+      const before=state.game.status;
       applyOp(op);
-      broadcast();res.writeHead(204,{'x-rev':String(state.rev)});res.end();}catch(e){res.writeHead(400);res.end(String(e.message));}});return;}
+      // Журнал для разбора спорных моментов: каждая запись — одна строка в stdout.
+      if(op.reset)log('rev',state.rev,'RESET',op.archive?'архив: '+(op.archive.scenarioId||'')+' '+(op.archive.status||''):'');
+      else log('rev',state.rev,op.col+(op.id?'/'+op.id:''),op.del?'удалено':'',op.col==='game'&&before!==state.game.status?before+' → '+state.game.status:'');
+      broadcast();res.writeHead(204,{'x-rev':String(state.rev)});res.end();}catch(e){log('400',e.message);res.writeHead(400);res.end(String(e.message));}});return;}
   if(u.pathname==='/archive'&&req.method==='GET'){
     let list=[];
     try{list=fs.readdirSync(ARCH).filter(f=>f.endsWith('.json')).map(f=>{try{return Object.assign({file:f},JSON.parse(fs.readFileSync(path.join(ARCH,f),'utf8')).summary);}catch(e){return null;}}).filter(Boolean).sort((a,b)=>b.file.localeCompare(a.file));}catch(e){}
@@ -87,7 +96,7 @@ return server;
 if(require.main===module){
 const PORT=+(process.argv[2]||process.env.PORT||8085);
 const HOST=process.env.HOST||'0.0.0.0';
-const server=makeServer();
+const server=makeServer({log:true});
 server.listen(PORT,HOST,()=>{
   const ips=Object.values(os.networkInterfaces()).flat().filter(i=>i&&i.family==='IPv4'&&!i.internal).map(i=>i.address);
   console.log('Воркшоп инцидентов запущен.');
@@ -96,6 +105,7 @@ server.listen(PORT,HOST,()=>{
   console.log('  War-room, пульт GM:  http://localhost:'+PORT+'/#gm');
   ips.forEach(ip=>console.log('  Игроки (та же Wi-Fi):  http://'+ip+':'+PORT+'/#play'));
   console.log('Состояние: state.json. Архив игр: archive/. Сброс — кнопкой на пульте.');
+  console.log(process.env.GM_PIN?'Пульт защищён PIN (GM_PIN).':'Пульт открыт всем в сети. Чтобы защитить: GM_PIN=1234 npm start');
 });
 const stop=()=>{server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();};
 process.on('SIGINT',stop);process.on('SIGTERM',stop);

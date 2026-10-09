@@ -175,10 +175,12 @@
       props.push({id, doc: Object.assign({}, p, {status: 'done', doneAt: Math.round(T)})});
       dirty = true;
       if (mit && mit.trap) addPanic(mit.trapDelta || 2, 'ловушка ' + p.mitId);
-      if (!(p.cards || []).length) addPanic(2, 'действие вслепую ' + p.mitId);
+      // Обратимые меры (флаг, откат) допустимо применять до доказательств: «сначала остановить кровь».
+      if (!(p.cards || []).length && !(mit && mit.reversible)) addPanic(2, 'действие вслепую ' + p.mitId);
       const after = pack.telemetry(Object.assign({}, game, patch, {applied: Array.from(A)})).mult;
       if (!fired.stab && after <= pack.money.stabilizeAtMult && before > pack.money.stabilizeAtMult) {
         fired.stab = 1;
+        patch.mitigatedSec = Math.round(T); // время до остановки влияния (TTM)
         addPanic(-3, 'стабилизация сервиса');
       }
     }

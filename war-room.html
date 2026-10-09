@@ -154,6 +154,8 @@ const ARTBY=()=>Object.fromEntries(ART().map(a=>[a.id,a]));
 const MITBY=()=>Object.fromEntries(ARTM().map(m=>[m.id,m]));
 const KEYS=()=>[...new Set(ART().map(a=>a.key).filter(Boolean))].sort();
 const keyTotal=()=>KEYS().length;
+/* «Вслепую» — действие без улик, кроме обратимых (флаг, откат): их допустимо применять до доказательств. */
+const isBlind=(p,pack)=>!(p.cards||[]).length&&!((pack||P()).mitigations.find(m=>m.id===p.mitId)||{}).reversible;
 function activePack(){
   const all=Object.values(window.SCENARIOS);
   const id=(S.g&&S.g.scenarioId)||lobbySel().scenarioId;
@@ -182,10 +184,14 @@ const store={
   mode:isHttp?'http':'local',
   apply(st){STATE=st||EMPTY();S.rev=STATE.rev||0;S.g=STATE.game;S.players=STATE.players||{};const arr=o=>Object.entries(o||{}).map(([id,d])=>({id,...d})).sort((a,b)=>(a.t||0)-(b.t||0));S.wall=arr(STATE.wall);S.hyps=arr(STATE.hypotheses);S.props=arr(STATE.proposals);S.statuses=arr(STATE.statuses);waiters.forEach(f=>f());waiters.clear();render();},
   whenRefreshed(prevRev){if((STATE.rev||0)!==prevRev)return Promise.resolve();return new Promise(res=>{const to=setTimeout(()=>{waiters.delete(f);res();},1500);const f=()=>{clearTimeout(to);waiters.delete(f);res();};waiters.add(f);});},
-  async write(op){ // {col,id,doc} | {col,id,del:true} | {reset:true, archive?}
+  async write(op,opts={}){ // {col,id,doc} | {col,id,del:true} | {reset:true, archive?}; opts.auto — запись автопилота
     if(this.mode==='http'){
+      const gmOp=op.reset||op.col==='game';
       const attempt=async()=>{
-        const r=await fetch('/write',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...op,expectRev:STATE.rev})});
+        const headers={'content-type':'application/json'};
+        if(gmOp){const pin=gmPin();if(pin)headers['x-gm-pin']=pin;}
+        const r=await fetch('/write',{method:'POST',headers,body:JSON.stringify({...op,expectRev:STATE.rev})});
+        if(r.status===401)throw{code:401};
         if(r.status===409)throw{code:409};
         if(!r.ok)throw new Error(r.status);
         // Сервер отдаёт новый rev в x-rev. SSE с тем же rev может прийти раньше ответа,
@@ -194,6 +200,13 @@ const store={
       };
       try{await attempt();}
       catch(e){
+        if(e&&e.code===401){
+          // Автопилот не дёргает prompt каждые полсекунды: показываем кнопку «Ввести PIN».
+          if(opts.auto||!askGmPin()){S.needPin=true;render();throw e;}
+          S.needPin=false;
+          try{await attempt();}catch(e2){if(e2&&e2.code===401){forgetGmPin();toast('Неверный PIN ведущего');}throw e2;}
+          return;
+        }
         if(e&&e.code===409){
           const prev=STATE.rev;await this.whenRefreshed(prev);
           try{await attempt();}catch(e2){toast('Конфликт изменений, попробуйте ещё раз');throw e2;}
@@ -219,6 +232,12 @@ const store={
   }
 };
 const setDoc=(col,id,doc)=>store.write({col,id,doc});
+/* PIN ведущего (если сервер запущен с GM_PIN): нужен пульту и проектору, игрокам — нет. */
+function gmPin(){try{return localStorage.getItem('pn.gmpin')||'';}catch(e){return '';}}
+function forgetGmPin(){try{localStorage.removeItem('pn.gmpin');}catch(e){}}
+function askGmPin(){const v=prompt('PIN ведущего (задан при запуске сервера через GM_PIN):');if(!v)return false;try{localStorage.setItem('pn.gmpin',v.trim());}catch(e){}return true;}
+function enterPin(){if(askGmPin()){S.needPin=false;render();toast('PIN сохранён');}}
+function pinNote(){return S.needPin&&(S.view==='gm'||S.view==='projector')?`<button class="primary" style="position:fixed;left:16px;bottom:16px;z-index:60" onclick="enterPin()">🔒 Ввести PIN ведущего</button>`:'';}
 const delDoc=(col,id)=>store.write({col,id,del:true});
 
 async function boot(){
@@ -272,7 +291,7 @@ async function runAutopilot(){
     if(!last||last.rate!==r)segs.push({t:Math.round(ENGINE.gameSec(ng,Date.now())),rate:r});
     ng.rateSegments=segs;
     S.g=ng;render();
-    await store.write({col:'game',doc:ng});
+    await store.write({col:'game',doc:ng},{auto:true});
     for(const pr of (plan.props||[])){try{await setDoc('proposals',pr.id,pr.doc);}catch(e){}}
   }catch(e){/* 409 или сеть: свежее состояние придёт по SSE, следующий тик пересчитает */}
   finally{autoBusy=false;}
@@ -308,7 +327,7 @@ async function pinToWall(artifactId,summary){
 }
 async function propose(mitId,cards){
   const id=uid();const doc={mitId,role:S.role,cards,t:Math.round(ENGINE.gameSec(G())),status:'pending'};
-  await setDoc('proposals',id,doc);toast(cards.length?'Отправлено IC на «Go»':'Отправлено вслепую: +2 паники при выполнении');
+  await setDoc('proposals',id,doc);toast(cards.length?'Отправлено IC на «Go»':MITBY()[mitId]?.reversible?'Отправлено IC: обратимое действие, улики не обязательны':'Отправлено вслепую: +2 паники при выполнении');
 }
 async function updProp(id,patch){const p=S.props.find(x=>x.id===id);if(!p)return;const {id:_,...body}=p;await setDoc('proposals',id,{...body,...patch});}
 async function upsertHyp(id,patch){const h=S.hyps.find(x=>x.id===id);const body=h?(({id:_,...b})=>b)(h):{text:'',status:'open',cards:[],t:Math.round(ENGINE.gameSec(G()))};await setDoc('hypotheses',id||uid(),{...body,...patch});}
@@ -345,7 +364,7 @@ function render(){
   else if(S.view==='gm')html=renderGM();
   else if(S.view==='play')html=S.role&&ROLES()[S.role]?renderPlayer():renderRolePicker();
   else html=renderHome();
-  app.innerHTML=html;
+  app.innerHTML=html+pinNote();
   Object.entries(drafts).forEach(([id,v])=>{const e=document.getElementById(id);if(e&&!e.value)e.value=v;});
   if(focusId){const e=document.getElementById(focusId);if(e){e.focus();try{if(selStart!=null)e.setSelectionRange(selStart,selStart);}catch(_){}}}
   window.scrollTo(0,scroll);
@@ -379,7 +398,7 @@ function renderHome(){
       <li>Время стоит денег: каждый запрос данных ждёт секунды, секунды превращаются в рубли.</li>
       <li>Показывать экран нельзя. Только голос.</li>
       <li>Сырые данные на стену не попадают — только ваш вывод в 140 знаков.</li>
-      <li>Действие без привязанной улики — вслепую: +2 паники.</li>
+      <li>Действие без привязанной улики — вслепую: +2 паники. Обратимые меры (фича-флаг, откат) можно без улик.</li>
       <li>Победа: success ≥ 95% держится заданное время. Стоп — по хронометражу кейса.</li>
     </ol></div>
     <div class="card stack"><div class="row" style="justify-content:space-between"><div class="eyebrow">История игр</div><button class="sm" onclick="loadArchives()">Обновить список</button></div>${archiveListHtml()}</div>
@@ -422,13 +441,13 @@ function renderProjector(){
   const applied=(g.applied||[]).map(id=>`<span class="pill ${MITBY()[id]?.trap?'red':'green'}">${id}</span>`).join(' ');
   let overlay='';
   if(g.call&&g.call.active){overlay=`<div class="overlay"><div class="callcard"><div class="eyebrow" style="color:#ffb3b5">📞 Входящий звонок</div><div class="who">${esc(g.call.caller)}</div><div class="cd" data-callcd>${fmtT(Math.max(0,(g.call.dur||180)-(T-g.call.startedAt)))}</div><div class="muted">до срыва · +1 паники каждые ${P().schedule.cioCall.panicEverySec} с без ответа</div></div></div>`;}
-  else if(g.status==='RESOLVED'||g.status==='FAILED'){overlay=`<div class="overlay end ${g.status==='FAILED'?'fail':''}"><div class="callcard"><div class="eyebrow">${g.status==='RESOLVED'?'Инцидент закрыт':'Инцидент не потушен'}</div><div class="who">${g.status==='RESOLVED'?'RESOLVED':'FAILED'}</div><div class="cd" style="color:${g.status==='RESOLVED'?'var(--green)':'var(--red)'}">${fmtRub(ENGINE.burned(g))}</div><div class="muted">${fmtT(g.endedSec||T)} · паника ${p} · улик ${S.wall.filter(w=>w.key).length} из ${keyTotal()} · действий вслепую ${S.props.filter(x=>x.status==='done'&&!(x.cards||[]).length).length}</div></div></div>`;}
+  else if(g.status==='RESOLVED'||g.status==='FAILED'){overlay=`<div class="overlay end ${g.status==='FAILED'?'fail':''}"><div class="callcard"><div class="eyebrow">${g.status==='RESOLVED'?'Инцидент закрыт':'Инцидент не потушен'}</div><div class="who">${g.status==='RESOLVED'?'RESOLVED':'FAILED'}</div><div class="cd" style="color:${g.status==='RESOLVED'?'var(--green)':'var(--red)'}">${fmtRub(ENGINE.burned(g))}</div><div class="muted">${fmtT(g.endedSec||T)} · паника ${p} · улик ${S.wall.filter(w=>w.key).length} из ${keyTotal()} · действий вслепую ${S.props.filter(x=>x.status==='done'&&isBlind(x)).length}${g.mitigatedSec!=null?' · влияние остановлено на '+fmtT(g.mitigatedSec):''}</div></div></div>`;}
   else if(g.status==='LOBBY'){overlay=`<div class="overlay"><div class="callcard" style="border-color:var(--line2);box-shadow:none;animation:none"><div class="eyebrow">Подключение</div><div class="who" style="font-size:32px">${esc(P().title)}</div>${lobbySel().mode==='training'?'<div style="margin-top:8px"><span class="pill violet">учебный режим</span></div>':''}<div class="mono" style="margin:12px 0;font-size:18px;word-break:break-all">${esc(store.mode==='http'?location.origin+'/#play':'на этом же ноутбуке: вкладка #play')}</div><div class="row" style="justify-content:center">${ROLE_ORDER().map(r=>`<span class="pill ${S.players[r]?.name?'green':''}">${ROLES()[r].short}${S.players[r]?.name?' · '+esc(S.players[r].name):''}</span>`).join('')}</div><div class="muted" style="margin-top:14px">Ведущий запустит инцидент с пульта</div></div></div>`;}
   return `<div class="proj">
     <div class="top">
       <div><div class="lbl">Инцидент · ${esc(P().title)}${g.mode==='training'?' · учебный':''}</div><div class="clock" data-clock>${fmtT(T)}</div></div>
       <div><div class="lbl">Сожжено</div><div class="money" data-money>${fmtRub(ENGINE.burned(g))}</div><div class="lbl">${fmtRub(ENGINE.currentRate(g,P()))} / мин</div></div>
-      <div style="margin-left:auto;text-align:right"><div class="lbl">Статус</div><div style="font-family:var(--mono);font-size:28px;color:${g.status==='ACTIVE'?'var(--red)':g.status==='RESOLVED'?'var(--green)':'var(--amber)'}">${g.status}</div><div class="lbl">${esc(tel.label)}</div>${g.fired&&g.fired.win?'<div><span class="pill green">победа: ждём Resolved</span></div>':''}</div>
+      <div style="margin-left:auto;text-align:right"><div class="lbl">Статус</div><div style="font-family:var(--mono);font-size:28px;color:${g.status==='ACTIVE'?'var(--red)':g.status==='RESOLVED'?'var(--green)':'var(--amber)'}">${g.status}</div><div class="lbl">${esc(tel.label)}</div>${g.mitigatedSec!=null?`<div><span class="pill cyan">влияние остановлено: ${fmtT(g.mitigatedSec)}</span></div>`:''}${g.fired&&g.fired.win?'<div><span class="pill green">победа: ждём Resolved</span></div>':''}</div>
       <button class="sm" id="armAudio" onclick="armAudio()">${audio.armed?'🔊 звук включён':'🔇 включить звук'}</button>
     </div>
     <div class="main">
@@ -456,7 +475,7 @@ function buildFeed(st,pack){
   const RO=pack.roles,MIT=Object.fromEntries(pack.mitigations.map(m=>[m.id,m]));
   const out=[...(g.events||[])];
   wall.forEach(w=>out.push({t:w.t,msg:`${RO[w.role]?.short||w.role}: на стену «${w.summary}»`,sev:w.key?'success':'info'}));
-  props.forEach(p=>{out.push({t:p.t,msg:`${RO[p.role]?.short} предлагает ${p.mitId}: ${MIT[p.mitId]?.title||''}${(p.cards||[]).length?'':' (вслепую)'}`,sev:'warning'});if(p.goAt!=null)out.push({t:p.goAt,msg:`IC: Go на ${p.mitId}`,sev:'warning'});});
+  props.forEach(p=>{out.push({t:p.t,msg:`${RO[p.role]?.short} предлагает ${p.mitId}: ${MIT[p.mitId]?.title||''}${isBlind(p,pack)?' (вслепую)':''}`,sev:'warning'});if(p.goAt!=null)out.push({t:p.goAt,msg:`IC: Go на ${p.mitId}`,sev:'warning'});});
   statuses.forEach(s=>out.push({t:s.t,msg:`Статус-пейдж: «${s.text.slice(0,90)}»`,sev:'info'}));
   hyps.forEach(h=>out.push({t:h.t,msg:`Гипотеза: ${h.text} [${h.status}]`,sev:'info'}));
   return out.sort((a,b)=>a.t-b.t);
@@ -481,7 +500,7 @@ function renderGM(){
   const g=G();const T=ENGINE.gameSec(g);const tel=P().telemetry(g);
   const inflight=ROLE_ORDER().map(r=>{const p=S.players[r];if(!p)return `<div class="dim">${ROLES()[r].short}: —</div>`;const f=p.inFlight&&Date.now()<p.inFlight.readyAt?`ждёт ${p.inFlight.id} <span data-cd="${p.inFlight.readyAt}"></span>`:'свободен';return `<div><b>${ROLES()[r].short}</b> ${esc(p.name||'')} · ${f}</div>`;}).join('');
   const wall=S.wall.slice().reverse().map(w=>`<div class="wallcard ${w.key?'key':''}"><div class="who"><span>${fmtT(w.t)} · ${ROLES()[w.role]?.short} · ${w.artifactId}${ARTBY()[w.artifactId]?.key?` <span class="dim">(в артефакте ${ARTBY()[w.artifactId].key})</span>`:''}</span><span class="row" style="gap:4px"><select class="sm" style="width:auto;padding:2px 6px" onchange="markKey('${w.id}',this.value)"><option value="">не ключ</option>${KEYS().map(k=>`<option ${w.key===k?'selected':''}>${k}</option>`).join('')}</select></span></div>${esc(w.summary)}</div>`).join('')||'<div class="dim">пусто</div>';
-  const props=S.props.filter(p=>p.status!=='done'&&p.status!=='rejected').slice().reverse().map(p=>{const m=MITBY()[p.mitId];return `<div class="item ${p.status==='pending'?'pending':''}"><div class="head"><span><b>${p.mitId}</b> ${esc(m?.title||'')} <span class="pill ${p.status==='go'?'amber':''}">${p.status}</span> ${m?.trap?'<span class="pill red">ловушка</span>':''}${(p.cards||[]).length?'':'<span class="pill red">вслепую</span>'}${p.reviewedBy?`<span class="pill green">ревью: ${ROLES()[p.reviewedBy]?.short}</span>`:(m?.review?'<span class="pill amber">без ревью → d10</span>':'')}</span><span class="cost">${fmtT(p.t)} · ${ROLES()[p.role]?.short}</span></div>
+  const props=S.props.filter(p=>p.status!=='done'&&p.status!=='rejected').slice().reverse().map(p=>{const m=MITBY()[p.mitId];return `<div class="item ${p.status==='pending'?'pending':''}"><div class="head"><span><b>${p.mitId}</b> ${esc(m?.title||'')} <span class="pill ${p.status==='go'?'amber':''}">${p.status}</span> ${m?.trap?'<span class="pill red">ловушка</span>':''}${isBlind(p)?'<span class="pill red">вслепую</span>':(m?.reversible&&!(p.cards||[]).length?'<span class="pill cyan">обратимо</span>':'')}${p.reviewedBy?`<span class="pill green">ревью: ${ROLES()[p.reviewedBy]?.short}</span>`:(m?.review?'<span class="pill amber">без ревью → d10</span>':'')}</span><span class="cost">${fmtT(p.t)} · ${ROLES()[p.role]?.short}</span></div>
     <div class="hint">${(p.cards||[]).map(c=>{const w=S.wall.find(x=>x.id===c);return w?'«'+esc(w.summary)+'»':''}).join(' · ')}</div>
     <div class="row" style="margin-top:8px">${p.status==='pending'?`<button class="sm" onclick="gmGo('${p.id}')">Go за IC</button>`:''}${p.status==='go'?`<button class="sm primary" onclick="gmApply('${p.id}')">Выполнено немедленно</button>`:''}<button class="sm danger" onclick="updProp('${p.id}',{status:'rejected'})">Отклонить</button></div></div>`;}).join('')||'<div class="dim">нет предложений</div>';
   const statuses=S.statuses.filter(s=>s.score==null).map(s=>`<div class="item"><div class="head"><b>Статус-пейдж · ${fmtT(s.t)}</b></div><div style="margin:6px 0">${esc(s.text)}</div><div class="hint">1) что не работает и что работает · 2) что делаем, без непроверенной причины · 3) время следующего апдейта</div><div class="row" style="margin-top:6px">${[0,1,2,3].map(n=>`<button class="sm ${n>=2?'ok':''}" onclick="rateStatus('${s.id}',${n},false)">${n} из 3</button>`).join('')}<button class="sm danger" onclick="rateStatus('${s.id}',0,true)">Обещан срок / ложная причина (+1)</button></div></div>`).join('');
@@ -551,13 +570,13 @@ async function execMit(mitId,p){
   if(eff.set)Object.assign(patch,eff.set);
   if(eff.transientSec)patch.transientUntil=Date.now()+eff.transientSec*1000;
   let msg=eff.msg||(`Выполнено ${mitId}: ${m.title}`);let sev=eff.sev||'success';
-  const blind=p&&!(p.cards||[]).length;
+  const blind=p&&isBlind(p,pk);
   if(p&&m.review&&!p.reviewedBy){const d=1+Math.floor(Math.random()*10);msg+=` · без ревью, d10=${d}`;if(d<=2){msg+=' — ОШИБКА В КОНФИГЕ, соседний сервис упал';sev='danger';}}
   await gmWrite(patch,msg,sev);
   if(m.trap)await setPanic(m.trapDelta||2,'ловушка '+mitId);
   if(blind)await setPanic(2,'действие вслепую '+mitId);
   const g2=G();const after=pk.telemetry(g2).mult;
-  if(!(g2.fired&&g2.fired.stab)&&after<=pk.money.stabilizeAtMult&&before>pk.money.stabilizeAtMult){await gmWrite({fired:{...(g2.fired||{}),stab:1}});await setPanic(-3,'стабилизация сервиса');}
+  if(!(g2.fired&&g2.fired.stab)&&after<=pk.money.stabilizeAtMult&&before>pk.money.stabilizeAtMult){await gmWrite({fired:{...(g2.fired||{}),stab:1},mitigatedSec:Math.round(ENGINE.gameSec(g2))});await setPanic(-3,'стабилизация сервиса');}
 }
 async function unapply(id){const g=G();await gmWrite({applied:(g.applied||[]).filter(x=>x!==id)},`Снят эффект ${id}`,'info');}
 async function resetAll(){if(!confirm('Стереть состояние игры, игроков, стену, гипотезы и предложения? Игра уйдёт в архив.'))return;
@@ -573,7 +592,7 @@ function buildReport(st,pack,atMs){
   const wall=arr(st&&st.wall),props=arr(st&&st.proposals),statuses=arr(st&&st.statuses),hyps=arr(st&&st.hypotheses);
   const RO=pack.roles,MIT=Object.fromEntries(pack.mitigations.map(m=>[m.id,m]));
   const T=ENGINE.gameSec(g,nowMs);const feed=buildFeed(st,pack);
-  const keys=wall.filter(w=>w.key);const blind=props.filter(p=>p.status==='done'&&!(p.cards||[]).length);
+  const keys=wall.filter(w=>w.key);const blind=props.filter(p=>p.status==='done'&&isBlind(p,pack));
   const traps=props.filter(p=>p.status==='done'&&MIT[p.mitId]?.trap);
   const firstMention=(re)=>{const e=feed.find(x=>re.test(x.msg));return e?fmtT(e.t):'не прозвучало';};
   const gaps=(()=>{const ts=[0,...statuses.map(s=>s.t),Math.round(T)];let m=0;for(let i=1;i<ts.length;i++)m=Math.max(m,ts[i]-ts[i-1]);return fmtT(m);})();
@@ -591,6 +610,9 @@ function buildReport(st,pack,atMs){
 | Сожжено | ${fmtRub(ENGINE.burned(g,nowMs))} |
 | Паника в конце / максимум | ${g.panic||0} / ${Math.max(0,...(g.panicLog||[]).reduce((a,x)=>{a.push((a[a.length-1]||0)+x.d);return a;},[]))} |
 | Ключевых улик на стене | ${keys.length} (${keys.map(k=>k.key).join(', ')||'—'}) |
+| Первая ключевая улика на стене | ${keys.length?fmtT(Math.min(...keys.map(k=>k.t||0))):'не было'} |
+| Влияние остановлено (TTM) | ${g.mitigatedSec!=null?fmtT(g.mitigatedSec):'не остановлено'} |
+| Инцидент закрыт (TTR) | ${g.status==='RESOLVED'?fmtT(g.endedSec||0):'не закрыт'} |
 | Первое упоминание причины в ленте | ${pack.rootCause?firstMention(pack.rootCause):'—'} |
 | Действий вслепую | ${blind.length} |
 | Ловушек сработало | ${traps.length} (${traps.map(t=>t.mitId).join(', ')||'—'}) |
@@ -605,6 +627,8 @@ ${sec('Таймлайн',feed.map(e=>`- \`${fmtT(e.t)}\` ${e.msg}`))}${sec('Ст
 3. Какие срезы противоречили друг другу и как IC их сводил?
 4. Было ли ложное облегчение и как проверяли, что починка настоящая?
 5. Что клиенты/стейкхолдеры знали раньше инженеров?
+6. Какие условия системы сделали этот сбой возможным и незаметным? (Не «кто ошибся», а «почему ошибку было легко совершить».)
+7. Какие action items уменьшат TTM в следующий раз и у кого они в работе?
 `;
 }
 function exportTimeline(){
@@ -696,13 +720,13 @@ function renderWallTab(r,me){
 }
 function renderActions(r,me){
   const g=G();const mine=ARTM().filter(m=>m.role===r);
-  const chips=S.wall.map(w=>`<span class="chip ${(S.selCards||[]).includes(w.id)?'on':''}" onclick="toggleCard('${w.id}')">${w.artifactId}: ${esc(w.summary.slice(0,50))}${w.summary.length>50?'…':''}</span>`).join('')||'<span class="dim">на стене пока ничего — действие будет вслепую (+2 паники)</span>';
+  const chips=S.wall.map(w=>`<span class="chip ${(S.selCards||[]).includes(w.id)?'on':''}" onclick="toggleCard('${w.id}')">${w.artifactId}: ${esc(w.summary.slice(0,50))}${w.summary.length>50?'…':''}</span>`).join('')||'<span class="dim">на стене пока ничего — действие будет вслепую (+2 паники), если оно не обратимое</span>';
   const form=r==='commander'?'':`<div class="card stack"><div class="eyebrow">Предложить действие</div>
-    <select id="mitSel">${mine.map(m=>`<option value="${m.id}">${m.id} · ${esc(m.title)} · ${m.cost} с${m.review?' · ревью':''}</option>`).join('')}</select>
+    <select id="mitSel">${mine.map(m=>`<option value="${m.id}">${m.id} · ${esc(m.title)} · ${m.cost} с${m.review?' · ревью':''}${m.reversible?' · обратимо':''}</option>`).join('')}</select>
     <div class="hint">${mine.map(m=>`<b>${m.id}</b> — ${esc(m.hint||'')}`).join('<br>')}</div>
     <div class="eyebrow">Привязать улики со стены</div><div class="chips">${chips}</div>
     <button class="primary" onclick="propose(document.getElementById('mitSel').value,S.selCards||[]);S.selCards=[]">Отправить IC на «Go»</button></div>`;
-  const props=S.props.slice().reverse().map(p=>{const m=MITBY()[p.mitId];const canReview=r!=='commander'&&r!=='comms'&&p.role!==r&&p.status==='pending'&&m?.review&&!p.reviewedBy;return `<div class="item ${p.status==='pending'?'pending':p.status==='done'?'done':''}"><div class="head"><span><b>${p.mitId}</b> ${esc(m?.title||'')}</span><span class="pill ${p.status==='go'?'amber':p.status==='done'?'green':p.status==='rejected'?'red':''}">${p.status}</span></div><div class="hint">${fmtT(p.t)} · ${ROLES()[p.role]?.short} · ${(p.cards||[]).length?(p.cards.length+' улик'):'вслепую'}${p.reviewedBy?' · ревью: '+ROLES()[p.reviewedBy]?.short:''}${m?.review&&!p.reviewedBy&&p.status==='pending'?' · без ревью GM бросит d10':''}</div>
+  const props=S.props.slice().reverse().map(p=>{const m=MITBY()[p.mitId];const canReview=r!=='commander'&&r!=='comms'&&p.role!==r&&p.status==='pending'&&m?.review&&!p.reviewedBy;return `<div class="item ${p.status==='pending'?'pending':p.status==='done'?'done':''}"><div class="head"><span><b>${p.mitId}</b> ${esc(m?.title||'')}</span><span class="pill ${p.status==='go'?'amber':p.status==='done'?'green':p.status==='rejected'?'red':''}">${p.status}</span></div><div class="hint">${fmtT(p.t)} · ${ROLES()[p.role]?.short} · ${(p.cards||[]).length?(p.cards.length+' улик'):isBlind(p)?'вслепую':'без улик, обратимо'}${p.reviewedBy?' · ревью: '+ROLES()[p.reviewedBy]?.short:''}${m?.review&&!p.reviewedBy&&p.status==='pending'?' · без ревью GM бросит d10':''}</div>
     <div class="row" style="margin-top:6px">${canReview?`<button class="sm" onclick="updProp('${p.id}',{reviewedBy:'${r}'})">Ревью (+30 с)</button>`:''}${r==='commander'&&p.status==='pending'?`<button class="sm primary" onclick="icGo('${p.id}')" ${g.call&&g.call.active&&!S.players.comms?.shieldUsed?'disabled title="во время звонка Go недоступен"':''}>Go</button><button class="sm danger" onclick="updProp('${p.id}',{status:'rejected'})">Нет</button>`:''}${p.status==='go'?`<span class="hint">выполняется ${m?.cost+(p.reviewedBy?30:0)} с · GM применит эффект</span>`:''}</div></div>`;}).join('')||'<div class="dim">предложений нет</div>';
   return `<div class="stack" style="gap:14px">${form}<div><div class="eyebrow" style="margin-bottom:6px">Очередь действий</div><div class="list">${props}</div></div></div>`;
 }
