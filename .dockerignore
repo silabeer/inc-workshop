@@ -1,0 +1,6 @@
+.git
+test
+docs
+*.md
+state.json
+archive

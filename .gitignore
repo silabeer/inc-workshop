@@ -1,3 +1,7 @@
 state.json
+state.json.tmp
+archive/
+node_modules/
 .superpowers/
+.playwright-mcp/
 .DS_Store

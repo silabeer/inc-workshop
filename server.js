@@ -1,7 +1,7 @@
 // Сервер воркшопа инцидентов. Без зависимостей: node server.js [порт]
 // Отдаёт war-room.html, hall.html и статику движков/пакетов, хранит состояние
 // war-room (с rev для условных записей), рассылает изменения по SSE,
-// архивирует завершённые игры. Порт/хост: аргумент или PORT/HOST в окружении.
+// архивирует завершённые игры. Окружение: PORT, HOST, DATA_DIR.
 const http=require('http'),fs=require('fs'),path=require('path'),os=require('os');
 const ROOT=__dirname;
 const COLS=['players','wall','hypotheses','proposals','statuses'];
@@ -11,8 +11,9 @@ const isObj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 
 function makeServer(opts={}){
 const HTML=opts.html||path.join(ROOT,'war-room.html');
-const FILE=opts.file||path.join(ROOT,'state.json');
-const ARCH=opts.archiveDir||path.join(ROOT,'archive');
+const DATA=process.env.DATA_DIR||ROOT; // каталог состояния и архива (в Docker — том)
+const FILE=opts.file||path.join(DATA,'state.json');
+const ARCH=opts.archiveDir||path.join(DATA,'archive');
 const STATIC={'/hall.html':path.join(ROOT,'hall.html'),'/engine.js':path.join(ROOT,'engine.js'),'/hall-engine.js':path.join(ROOT,'hall-engine.js')};
 const EMPTY=()=>({rev:0,game:{status:'LOBBY',panic:0,applied:[],rateSegments:[],events:[]},players:{},wall:{},hypotheses:{},proposals:{},statuses:{}});
 let state=EMPTY();try{const raw=JSON.parse(fs.readFileSync(FILE,'utf8'));if(raw&&typeof raw.rev==='number')state=raw;}catch(e){}

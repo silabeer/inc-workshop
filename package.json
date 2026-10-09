@@ -1,0 +1,12 @@
+{
+  "name": "inc-workshop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Тренажёр инцидент-респонса для живых воркшопов: холл-режим и war-room",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test --test-force-exit"
+  }
+}
