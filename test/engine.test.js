@@ -256,3 +256,20 @@ test('автопилот: два действия в один тик не зат
   assert.ok(plan.patch.applied.includes('M-FIX'), 'M-FIX в applied');
   assert.ok(plan.patch.applied.includes('M-HOOK'), 'M-HOOK в applied');
 });
+
+test('автопилот: FAILED во время звонка CIO закрывает звонок', () => {
+  const st = mkState(mkGame({call: {active: true, caller: 'CIO', startedAt: 700, ticks: 0, dur: 90}, fired: {call: 1}}));
+  const plan = run(st, 720);
+  assert.strictEqual(plan.patch.status, 'FAILED');
+  assert.strictEqual(plan.patch.call.active, false);
+});
+
+test('eventPatch: эффекты ивента мира — общие для автопилота и ручного броска', () => {
+  const now = 50000;
+  assert.deepStrictEqual(ENGINE.eventPatch({fx: 'storm'}, now), {patch: {storm: true}, panic: 0});
+  assert.deepStrictEqual(ENGINE.eventPatch({fx: 'panic1'}, now), {patch: {}, panic: 1});
+  assert.deepStrictEqual(ENGINE.eventPatch({fx: 'scout-x2'}, now), {patch: {scoutX2: true}, panic: 0});
+  assert.deepStrictEqual(ENGINE.eventPatch({fx: 'transient', transientSec: 10}, now), {patch: {transientUntil: 60000}, panic: 0});
+  assert.deepStrictEqual(ENGINE.eventPatch({fx: 'transient'}, now), {patch: {transientUntil: 80000}, panic: 0});
+  assert.deepStrictEqual(ENGINE.eventPatch(null, now), {patch: {}, panic: 0});
+});

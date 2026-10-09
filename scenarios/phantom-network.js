@@ -332,6 +332,19 @@ Backoff с jitter лежит в бэклоге с марта. Могу выка�
     {id:'M-D4',role:'domain',title:'pg_terminate_backend для idle in transaction',cost:45,review:true,hint:'Освобождает 6 из 10 коннектов на 2 минуты.'},
   ],
 
+  // Проектор: графики по полям telemetry(); side — подпись справа от заголовка.
+  charts:[
+    {key:'err',title:'5xx · edge',max:100,color:'#ff4d4f',unit:' %',digits:1,idle:0.3,transient:60,jitter:4,
+     side:t=>'RPS '+new Intl.NumberFormat('ru-RU').format(t.rps)},
+    {key:'poolN',title:'Пул коннектов БД',max:t=>t.poolN>50?300:50,color:'#f5a524',idle:6,transient:20,jitter:2,
+     format:(v,t)=>Math.round(v)+' / '+(t.poolN>50?300:50),side:t=>'cl_waiting '+(t.poolN>=50?70:0)},
+    {key:'gor',title:'Горутины payment-proxy',max:300,color:'#4fc3f7',idle:210,transient:215,jitter:2,side:()=>'5xx 0 %'},
+  ],
+  // Ручные переключатели на пульте GM (поле game[key]).
+  manualFlags:[{key:'cleared',label:'зависшие потоки очищены (рестарт после флага)',on:'Зависшие потоки очищены'}],
+  // Первое упоминание настоящей причины в ленте — метрика постмортема.
+  rootCause:/эквайер|acq/i,
+
   telemetry:(g)=>{
     const A=new Set(g.applied||[]);
     const flag=A.has('M-D1')||A.has('M-D2')||A.has('M-D2b');

@@ -146,3 +146,11 @@ test('состояние сохраняется на диск и пережив�
   assert.strictEqual(saved.wall.w1.summary, 'улика');
   assert.deepStrictEqual(fs.readdirSync(dir).filter(f => f.includes('.tmp')), []);
 });
+
+test('успешная запись возвращает новый rev в заголовке x-rev', async (t) => {
+  const {port} = await startTmp(t);
+  const r = await fetch(`${BASE}:${port}/write`, {method: 'POST', headers: {'content-type': 'application/json'},
+    body: JSON.stringify({col: 'game', doc: {status: 'ACTIVE'}, expectRev: 0})});
+  assert.strictEqual(r.status, 204);
+  assert.strictEqual(r.headers.get('x-rev'), '1');
+});

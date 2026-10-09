@@ -62,7 +62,7 @@ const server=http.createServer((req,res)=>{
   if(u.pathname==='/write'&&req.method==='POST'){let b='';req.on('data',d=>{b+=d;if(b.length>1e6)req.destroy();});req.on('end',()=>{try{const op=JSON.parse(b);
       if(op&&op.expectRev!==undefined&&op.expectRev!==state.rev){res.writeHead(409);return res.end();}
       applyOp(op);
-      broadcast();res.writeHead(204);res.end();}catch(e){res.writeHead(400);res.end(String(e.message));}});return;}
+      broadcast();res.writeHead(204,{'x-rev':String(state.rev)});res.end();}catch(e){res.writeHead(400);res.end(String(e.message));}});return;}
   if(u.pathname==='/archive'&&req.method==='GET'){
     let list=[];
     try{list=fs.readdirSync(ARCH).filter(f=>f.endsWith('.json')).map(f=>{try{return Object.assign({file:f},JSON.parse(fs.readFileSync(path.join(ARCH,f),'utf8')).summary);}catch(e){return null;}}).filter(Boolean).sort((a,b)=>b.file.localeCompare(a.file));}catch(e){}

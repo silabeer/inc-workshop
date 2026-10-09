@@ -61,3 +61,26 @@ test('cert: инцидент err 7; M-P1 → err 99 mult 0; M-P2 → err 95; T-R
   const trap = p.telemetry({applied: ['T-ROLL'], status: 'ACTIVE'});
   assert.strictEqual(trap.err, 93, 'ловушка не лечит');
 });
+
+test('пак: графики проектора ссылаются на числовые поля телеметрии, rootCause — RegExp', () => {
+  for (const p of PACKS) {
+    const tel = p.telemetry({applied: []});
+    for (const c of (p.charts || [])) {
+      assert.strictEqual(typeof tel[c.key], 'number', `${p.id}: график ${c.key} — нет числового поля в telemetry`);
+      const max = typeof c.max === 'function' ? c.max(tel) : c.max;
+      assert.ok(max > 0, `${p.id}: график ${c.key} без max`);
+      assert.match(c.color, /^#[0-9a-f]{6}$/i, `${p.id}: график ${c.key} — цвет #rrggbb (к нему дописывается альфа)`);
+    }
+    if (p.rootCause !== undefined) assert.ok(p.rootCause instanceof RegExp, `${p.id}: rootCause не RegExp`);
+    for (const f of (p.manualFlags || [])) assert.match(f.key, /^\w+$/, `${p.id}: manualFlags.key`);
+  }
+});
+
+test('пак: таблица ивентов мира — d10 (индексы 1–10), пустые клетки допустимы', () => {
+  for (const p of PACKS) {
+    const we = p.schedule.worldEvents;
+    if (!we) continue;
+    assert.ok(we.table.length <= 11, `${p.id}: в таблице больше 10 исходов`);
+    for (const e of we.table.slice(1)) if (e) assert.ok(e.t, `${p.id}: ивент без заголовка t`);
+  }
+});

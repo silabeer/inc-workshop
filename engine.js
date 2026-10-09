@@ -38,6 +38,17 @@
     return Math.round(r);
   }
 
+  /* Эффект ивента мира (закрытый набор fx): патч в game и дельта паники.
+     Один источник правды для автопилота и ручного броска на пульте. */
+  function eventPatch(e, now) {
+    if (!e) return {patch: {}, panic: 0};
+    if (e.fx === 'storm') return {patch: {storm: true}, panic: 0};
+    if (e.fx === 'panic1') return {patch: {}, panic: 1};
+    if (e.fx === 'scout-x2') return {patch: {scoutX2: true}, panic: 0};
+    if (e.fx === 'transient') return {patch: {transientUntil: now + (e.transientSec || 30) * 1000}, panic: 0};
+    return {patch: {}, panic: 0};
+  }
+
   /* Планировщик автопилота: по состоянию и пакету решает, что должно
      произойти к игровому моменту T. Возвращает null или один слитый
      результат: patch (мердж в game), events (в ленту), props (дозаписи
@@ -58,6 +69,7 @@
     const addPanic = (d, why) => { panicDelta += d; panicLogAdd.push({t: Math.round(T), d, why}); };
     const fail = (why) => {
       patch.status = 'FAILED'; patch.endedSec = Math.round(T);
+      if (game.call && game.call.active) patch.call = Object.assign({}, game.call, {active: false});
       events.push({msg: 'FAILED: ' + why, sev: 'danger'});
       return {patch, events, props};
     };
@@ -129,10 +141,9 @@
       const e = we.table[n];
       if (!e) return;
       events.push({msg: 'Ивент d10=' + n + ': ' + e.t, sev: 'warning'});
-      if (e.fx === 'storm') patch.storm = true;
-      else if (e.fx === 'panic1') addPanic(1, e.t);
-      else if (e.fx === 'scout-x2') patch.scoutX2 = true;
-      else if (e.fx === 'transient') patch.transientUntil = now + (e.transientSec || 30) * 1000;
+      const fx = eventPatch(e, now);
+      Object.assign(patch, fx.patch);
+      if (fx.panic) addPanic(fx.panic, e.t);
     });
 
     // Исполнение действий
@@ -182,5 +193,5 @@
     return {patch, events, props};
   }
 
-  return {gameSec, burned, tierOf, currentRate, planAutopilot};
+  return {gameSec, burned, tierOf, currentRate, eventPatch, planAutopilot};
 });

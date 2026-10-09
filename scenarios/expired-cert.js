@@ -186,6 +186,16 @@ TLS / сетевое / конфиг   не тронуты`},
     {id:'T-SCALE',role:'platform',title:'Масштабировать api-service 8 → 16',cost:45,review:false,trap:true,trapDelta:1,hint:'Трафик до приложения не доходит.'},
   ],
 
+  // Проектор: графики по полям telemetry(); side — подпись справа от заголовка.
+  charts:[
+    {key:'err',title:'TLS handshake failure · edge',max:100,color:'#ff4d4f',unit:' %',digits:1,idle:0.3,transient:50,jitter:2,
+     side:t=>'success '+Math.max(0,100-t.err)+' %'},
+    {key:'rps',title:'RPS на edge',max:3000,color:'#4fc3f7',idle:2000,jitter:60,
+     format:v=>new Intl.NumberFormat('ru-RU').format(Math.round(v))},
+  ],
+  // Первое упоминание настоящей причины в ленте — метрика постмортема.
+  rootCause:/сертификат|certificate|expired/i,
+
   telemetry:(g)=>{
     const A=new Set(g.applied||[]);
     let t={err:93,rps:2000,pool:'—',poolN:0,gor:0,mult:1.0,label:'Инцидент: TLS handshake failure 100%, success 7%'};
