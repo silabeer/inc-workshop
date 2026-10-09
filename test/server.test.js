@@ -1,187 +1,202 @@
 const test = require('node:test');
-const assert = require('node:assert');
+const assert = require('node:assert/strict');
 const fs = require('fs'), os = require('os'), path = require('path');
+const { makeServer } = require('../server.js');
+const MINI = require('./fixtures/mini-pack.js');
 
 const BASE = 'http://127.0.0.1';
 
-async function startTmp(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pn-srv-'));
-  // Фикстура-пакет — в реальном каталоге сервера (статика раздаётся из ROOT/scenarios)
-  const scenDir = path.join(__dirname, '..', 'scenarios');
-  fs.mkdirSync(scenDir, {recursive: true});
-  const fixture = path.join(scenDir, '__fixture__.js');
-  fs.writeFileSync(fixture, 'SCENARIO({id:"x"});');
-  t.after(() => { try { fs.unlinkSync(fixture); } catch (e) {} });
-  fs.writeFileSync(path.join(dir, 'war-room.html'), '<html></html>');
-  const file = path.join(dir, 'state.json');
-  const archiveDir = path.join(dir, 'archive');
-  const {makeServer} = require('../server.js');
-  const srv = makeServer({file, archiveDir, html: path.join(dir, 'war-room.html')});
+async function start(t, opts = {}) {
+  const dir = opts.dir || fs.mkdtempSync(path.join(os.tmpdir(), 'incw-srv-'));
+  const srv = makeServer(Object.assign({ file: path.join(dir, 'state.json'), archiveDir: path.join(dir, 'archive'), packs: [MINI], gmPin: '' }, opts));
   await new Promise(res => srv.listen(0, '127.0.0.1', res));
-  t.after(() => srv.close());
+  t.after(() => new Promise(res => srv.close(res)));
   const port = srv.address().port;
-  return {dir, file, archiveDir, port};
+  const post = (p, body, headers = {}) => fetch(`${BASE}:${port}${p}`, {
+    method: 'POST', headers: Object.assign({ 'content-type': 'application/json' }, headers), body: JSON.stringify(body),
+  }).then(async r => ({ status: r.status, body: await r.json().catch(() => null) }));
+  const get = (p, headers = {}) => fetch(`${BASE}:${port}${p}`, { headers }).then(async r => ({ status: r.status, ct: r.headers.get('content-type'), body: await r.json().catch(() => null) }));
+  return { dir, port, post, get, srv };
 }
 
-const post = (port, op) => fetch(`${BASE}:${port}/write`, {
-  method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(op),
-}).then(r => r.status);
+// Первое SSE-сообщение потока: представление, которое сервер шлёт этому клиенту.
+async function firstEvent(port, query) {
+  const ac = new AbortController();
+  const r = await fetch(`${BASE}:${port}/events?${query}`, { signal: ac.signal });
+  if (r.status !== 200) { ac.abort(); return { status: r.status }; }
+  const reader = r.body.getReader();
+  let buf = '';
+  while (!buf.includes('\n\n')) buf += new TextDecoder().decode((await reader.read()).value);
+  ac.abort();
+  return { status: 200, view: JSON.parse(buf.slice(buf.indexOf('data: ') + 6, buf.indexOf('\n\n'))) };
+}
 
-const getJson = (port, p) => fetch(`${BASE}:${port}${p}`).then(async r => ({
-  status: r.status, ct: r.headers.get('content-type'), body: await r.json().catch(() => null),
-}));
+const cmd = (s, body, pin) => s.post('/api/cmd', body, pin ? { 'x-gm-pin': pin } : {});
 
-test('условная запись: из двух записей с одним expectRev проходит одна', async (t) => {
-  const {port} = await startTmp(t);
-  const g1 = {status: 'ACTIVE', startedAt: 1000, panic: 1};
-  const g2 = {status: 'ACTIVE', startedAt: 2000, panic: 2};
-  assert.strictEqual(await post(port, {col: 'game', doc: g1, expectRev: 0}), 204);
-  assert.strictEqual(await post(port, {col: 'game', doc: g2, expectRev: 0}), 409);
-  const st = await getJson(port, '/state');
-  assert.strictEqual(st.body.game.panic, 1);
-  assert.strictEqual(st.body.rev, 1);
+test('полный раунд по HTTP: роли занимают места, голосуют, ведущий раскрывает', async (t) => {
+  const s = await start(t);
+  for (const role of ['commander', 'scout', 'engineer']) assert.equal((await s.post('/api/claim', { role, token: 'tok-' + role })).status, 200);
+  assert.equal((await cmd(s, { type: 'start' })).status, 200);
+  assert.equal((await cmd(s, { type: 'voting' })).status, 200);
+  assert.equal((await s.post('/api/vote', { role: 'scout', token: 'tok-scout', option: 'A' })).status, 200);
+  assert.equal((await s.post('/api/vote', { role: 'engineer', token: 'tok-engineer', option: 'A' })).status, 200);
+  assert.equal((await cmd(s, { type: 'reveal' })).status, 200);
+  const h = await s.get('/healthz');
+  assert.equal(h.body.phase, 'revealed');
+  const gm = await firstEvent(s.port, 'view=gm');
+  assert.equal(gm.view.score, 2);
+  assert.equal(gm.view.journal[0].optionId, 'A');
 });
 
-test('запись без expectRev применяется всегда', async (t) => {
-  const {port} = await startTmp(t);
-  assert.strictEqual(await post(port, {col: 'game', doc: {status: 'ACTIVE', startedAt: 5}}), 204);
-  const st = await getJson(port, '/state');
-  assert.strictEqual(st.body.game.status, 'ACTIVE');
+test('занятую роль второе устройство не получает (409), голос с чужим токеном — 403', async (t) => {
+  const s = await start(t);
+  await s.post('/api/claim', { role: 'scout', token: 'aaa' });
+  const r = await s.post('/api/claim', { role: 'scout', token: 'bbb' });
+  assert.equal(r.status, 409);
+  assert.match(r.body.error, /занята/);
+  await cmd(s, { type: 'start' }); await cmd(s, { type: 'voting' });
+  assert.equal((await s.post('/api/vote', { role: 'scout', token: 'bbb', option: 'A' })).status, 403);
+  assert.equal((await s.post('/api/vote', { role: 'scout', token: 'aaa', option: 'A' })).status, 200);
+  const twice = await s.post('/api/vote', { role: 'scout', token: 'aaa', option: 'B' });
+  assert.equal(twice.status, 400);
+  assert.match(twice.body.error, /уже учтён/);
 });
 
-test('reset с archive пишет файл и /archive его отдаёт', async (t) => {
-  const {port, archiveDir} = await startTmp(t);
-  await post(port, {col: 'game', doc: {status: 'RESOLVED', startedAt: 1000, endedSec: 600, panic: 3}, expectRev: 0});
-  const summary = {scenarioId: 'expired-cert', mode: 'training', status: 'RESOLVED', endedSec: 600, burned: 1234567, at: new Date().toISOString()};
-  assert.strictEqual(await post(port, {reset: true, archive: summary}), 204);
-  const st = await getJson(port, '/state');
-  assert.strictEqual(st.body.game.status, 'LOBBY');
-  assert.strictEqual(st.body.rev, 2);
-  const files = fs.readdirSync(archiveDir);
-  assert.strictEqual(files.length, 1);
-  assert.match(files[0], /^[\w.-]+\.json$/);
-  const list = await getJson(port, '/archive');
-  assert.strictEqual(list.status, 200);
-  assert.strictEqual(list.body.length, 1);
-  assert.strictEqual(list.body[0].scenarioId, 'expired-cert');
-  assert.strictEqual(list.body[0].burned, 1234567);
-  const full = await getJson(port, `/archive/${files[0]}`);
-  assert.strictEqual(full.status, 200);
-  assert.strictEqual(full.body.summary.status, 'RESOLVED');
-  assert.strictEqual(full.body.state.game.endedSec, 600);
+test('недопустимая команда — 400 с понятным текстом, неизвестная — 400', async (t) => {
+  const s = await start(t);
+  const r = await cmd(s, { type: 'reveal' });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /после голосования/);
+  assert.equal((await cmd(s, { type: 'claim', role: 'scout', token: 'x' })).status, 400, 'claim не идёт через пульт');
+  assert.equal((await s.post('/api/cmd', 'строка')).status, 400);
 });
 
-test('reset без archive на пустом лобби не пишет файл', async (t) => {
-  const {port, archiveDir} = await startTmp(t);
-  assert.strictEqual(await post(port, {reset: true}), 204);
-  assert.strictEqual(fs.existsSync(archiveDir), false);
+test('PIN ведущего: команды пульта, поток #gm и полный пак без PIN — 401', async (t) => {
+  const s = await start(t, { gmPin: '4821' });
+  assert.equal((await cmd(s, { type: 'start' })).status, 401);
+  assert.equal((await cmd(s, { type: 'start' }, '0000')).status, 401);
+  assert.equal((await cmd(s, { type: 'start' }, '4821')).status, 200);
+  assert.equal((await firstEvent(s.port, 'view=gm')).status, 401);
+  assert.equal((await firstEvent(s.port, 'view=gm&pin=4821')).status, 200);
+  assert.equal((await s.get('/api/pack')).status, 401);
+  assert.equal((await s.get('/api/pack', { 'x-gm-pin': '4821' })).body.meta.id, 'mini');
+  assert.equal((await s.get('/api/auth')).status, 401);
+  assert.equal((await s.get('/api/auth', { 'x-gm-pin': '4821' })).status, 200);
+  // Телефоны и проектор работают без PIN.
+  assert.equal((await s.post('/api/claim', { role: 'scout', token: 't' })).status, 200);
+  assert.equal((await firstEvent(s.port, 'view=screen')).status, 200);
 });
 
-test('/scenarios/*.js отдаётся как javascript, отсутствующий — 404', async (t) => {
-  const {port} = await startTmp(t);
-  const ok = await getJson(port, '/scenarios/__fixture__.js');
-  assert.strictEqual(ok.status, 200);
-  assert.match(ok.ct, /javascript/);
-  const miss = await fetch(`${BASE}:${port}/scenarios/nope.js`);
-  assert.strictEqual(miss.status, 404);
-  const eng = await getJson(port, '/engine.js');
-  assert.strictEqual(eng.status, 200);
-  assert.match(eng.ct, /javascript/);
+test('SSE: проектор и чужой телефон не получают приватку, голоса и подсказки', async (t) => {
+  const s = await start(t);
+  await s.post('/api/claim', { role: 'scout', token: 'tok' });
+  await cmd(s, { type: 'start' }); await cmd(s, { type: 'voting' });
+  await s.post('/api/vote', { role: 'scout', token: 'tok', option: 'B' });
+  const screen = JSON.stringify((await firstEvent(s.port, 'view=screen')).view);
+  assert.ok(!screen.includes('секрет-'));
+  assert.ok(!screen.includes('Подсказка ведущему'));
+  assert.ok(!screen.includes('"votes"'));
+  const mine = (await firstEvent(s.port, 'view=play&role=scout&token=tok')).view;
+  assert.equal(mine.private.data, 'секрет-s1-scout');
+  assert.equal(mine.myVote, 'B');
+  const stranger = (await firstEvent(s.port, 'view=play&role=scout&token=wrong')).view;
+  assert.equal(stranger.role, null);
+  assert.ok(!JSON.stringify(stranger).includes('секрет-'));
 });
 
-test('хранимый state.json без rev игнорируется', async (t) => {
-  const {port, file} = await startTmp(t);
-  fs.writeFileSync(file, JSON.stringify({game: {status: 'ACTIVE', startedAt: 123}, players: {}, wall: {}, hypotheses: {}, proposals: {}, statuses: {}}));
-  // перезапуск с тем же файлом
-  const {makeServer} = require('../server.js');
-  const srv2 = makeServer({file, archiveDir: path.join(path.dirname(file), 'a2'), html: path.join(path.dirname(file), 'war-room.html')});
-  await new Promise(res => srv2.listen(0, '127.0.0.1', res));
-  t.after(() => srv2.close());
-  const st = await getJson(srv2.address().port, '/state');
-  assert.strictEqual(st.body.game.status, 'LOBBY');
-  assert.strictEqual(st.body.rev, 0);
+test('SSE: изменение рассылается подписанным клиентам', async (t) => {
+  const s = await start(t);
+  const ac = new AbortController();
+  t.after(() => ac.abort());
+  const r = await fetch(`${BASE}:${s.port}/events?view=screen`, { signal: ac.signal });
+  const reader = r.body.getReader();
+  const views = [];
+  let buf = '';
+  const pump = (async () => {
+    while (views.length < 2) {
+      buf += new TextDecoder().decode((await reader.read()).value);
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (chunk.startsWith('data: ')) views.push(JSON.parse(chunk.slice(6)));
+      }
+    }
+  })();
+  await new Promise(res => setTimeout(res, 50));
+  await cmd(s, { type: 'start' });
+  await pump;
+  assert.equal(views[0].phase, 'lobby');
+  assert.equal(views[1].phase, 'situation');
 });
 
-test('холл-режим раздаётся сервером: hall.html как html, hall-engine.js как javascript', async (t) => {
-  const {port} = await startTmp(t);
-  const page = await fetch(`${BASE}:${port}/hall.html`);
-  assert.strictEqual(page.status, 200);
-  assert.match(page.headers.get('content-type'), /text\/html/);
-  assert.match(await page.text(), /hall-engine\.js/);
-  const eng = await fetch(`${BASE}:${port}/hall-engine.js`);
-  assert.strictEqual(eng.status, 200);
-  assert.match(eng.headers.get('content-type'), /javascript/);
+test('восстановление из state.json: рестарт продолжает с того же шага', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-srv-'));
+  const s1 = await start(t, { dir });
+  await s1.post('/api/claim', { role: 'domain', token: 'dd' });
+  await cmd(s1, { type: 'start' }); await cmd(s1, { type: 'voting' }); await cmd(s1, { type: 'reveal', option: 'A' }); await cmd(s1, { type: 'next' });
+  await new Promise(res => s1.srv.close(res));
+  const s2 = await start(t, { dir });
+  const v = (await firstEvent(s2.port, 'view=play&role=domain&token=dd')).view;
+  assert.equal(v.stepNo, 2);
+  assert.equal(v.phase, 'situation');
+  assert.equal(v.role.id, 'domain', 'роль переживает рестарт');
+  assert.equal(v.score, 2);
 });
 
-test('/healthz отвечает 200 с rev и числом клиентов', async (t) => {
-  const {port} = await startTmp(t);
-  const h = await getJson(port, '/healthz');
-  assert.strictEqual(h.status, 200);
-  assert.strictEqual(h.body.ok, true);
-  assert.strictEqual(typeof h.body.rev, 'number');
-  assert.strictEqual(typeof h.body.clients, 'number');
+test('новая партия архивирует сыгранную и сохраняет команду и места', async (t) => {
+  const s = await start(t);
+  await s.post('/api/claim', { role: 'comms', token: 'cc' });
+  await cmd(s, { type: 'team', team: 'Дежурные' });
+  await cmd(s, { type: 'start' }); await cmd(s, { type: 'voting' }); await cmd(s, { type: 'reveal', option: 'A' });
+  assert.equal((await cmd(s, { type: 'reset', scenarioId: 'mini' })).status, 200);
+  const list = await s.get('/archive');
+  assert.equal(list.body.length, 1);
+  assert.equal(list.body[0].team, 'Дежурные');
+  assert.equal(list.body[0].score, 2);
+  const full = await s.get('/archive/' + list.body[0].file);
+  assert.equal(full.body.session.journal.length, 1);
+  const v = (await firstEvent(s.port, 'view=play&role=comms&token=cc')).view;
+  assert.equal(v.phase, 'lobby');
+  assert.equal(v.team, 'Дежурные');
+  assert.equal(v.role.id, 'comms');
+  assert.equal((await cmd(s, { type: 'reset', scenarioId: 'нет-такого' })).status, 400);
 });
 
-test('неизвестный путь — 404, корень и /index.html — war-room', async (t) => {
-  const {port} = await startTmp(t);
-  assert.strictEqual((await fetch(`${BASE}:${port}/favicon.ico`)).status, 404);
-  assert.strictEqual((await fetch(`${BASE}:${port}/`)).status, 200);
-  assert.strictEqual((await fetch(`${BASE}:${port}/index.html`)).status, 200);
+test('новая партия без сыгранных шагов архив не пишет', async (t) => {
+  const s = await start(t);
+  await cmd(s, { type: 'reset' });
+  assert.equal(fs.existsSync(path.join(s.dir, 'archive')), false);
 });
 
-test('запись с недопустимым id или doc-не-объектом — 400, состояние не меняется', async (t) => {
-  const {port} = await startTmp(t);
-  assert.strictEqual(await post(port, {col: 'wall', id: "x');alert(1)//", doc: {summary: 'a'}}), 400);
-  assert.strictEqual(await post(port, {col: 'wall', id: 'ok1', doc: 'строка'}), 400);
-  assert.strictEqual(await post(port, {col: 'game', doc: null}), 400);
-  const st = await getJson(port, '/state');
-  assert.strictEqual(st.body.rev, 0);
-  assert.deepStrictEqual(st.body.wall, {});
+test('статика: страница, тема, шрифты, ui-скрипты; паки и движок наружу не отдаются', async (t) => {
+  const s = await start(t);
+  const ct = async p => { const r = await fetch(`${BASE}:${s.port}${p}`); await r.arrayBuffer(); return [r.status, r.headers.get('content-type')]; };
+  assert.deepEqual(await ct('/'), [200, 'text/html; charset=utf-8']);
+  assert.deepEqual(await ct('/theme.css'), [200, 'text/css; charset=utf-8']);
+  assert.equal((await ct('/fonts/fonts.css'))[0], 200);
+  const font = fs.readdirSync(path.join(__dirname, '..', 'fonts')).find(f => f.endsWith('.woff2'));
+  assert.deepEqual(await ct('/fonts/' + font), [200, 'font/woff2']);
+  assert.deepEqual(await ct('/ui/app.js'), [200, 'text/javascript; charset=utf-8']);
+  assert.equal((await ct('/scenarios/phantom-network.js'))[0], 404, 'пак с приваткой не раздаётся');
+  assert.equal((await ct('/state.json'))[0], 404);
+  assert.equal((await ct('/ui/..%2Fserver.js'))[0], 404);
+  assert.equal((await ct('/nope'))[0], 404);
 });
 
-test('состояние сохраняется на диск и переживает перезапуск', async (t) => {
-  const {port, file, dir} = await startTmp(t);
-  assert.strictEqual(await post(port, {col: 'wall', id: 'w1', doc: {summary: 'улика'}}), 204);
-  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.strictEqual(saved.wall.w1.summary, 'улика');
-  assert.deepStrictEqual(fs.readdirSync(dir).filter(f => f.includes('.tmp')), []);
+test('/healthz и /api/info', async (t) => {
+  const s = await start(t, { gmPin: '1' });
+  const h = await s.get('/healthz');
+  assert.deepEqual(Object.keys(h.body).sort(), ['clients', 'gmPin', 'ok', 'phase', 'scenarioId']);
+  assert.equal(h.body.gmPin, true);
+  const i = await s.get('/api/info');
+  assert.ok(Array.isArray(i.body.playUrls));
+  assert.ok(i.body.playUrls.every(u => u.endsWith('/#play')));
 });
 
-test('успешная запись возвращает новый rev в заголовке x-rev', async (t) => {
-  const {port} = await startTmp(t);
-  const r = await fetch(`${BASE}:${port}/write`, {method: 'POST', headers: {'content-type': 'application/json'},
-    body: JSON.stringify({col: 'game', doc: {status: 'ACTIVE'}, expectRev: 0})});
-  assert.strictEqual(r.status, 204);
-  assert.strictEqual(r.headers.get('x-rev'), '1');
-});
-
-test('PIN ведущего: game и reset без верного x-gm-pin — 401, коллекции игроков открыты', async (t) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pn-pin-'));
-  fs.writeFileSync(path.join(dir, 'war-room.html'), '<html></html>');
-  const {makeServer} = require('../server.js');
-  const srv = makeServer({file: path.join(dir, 'state.json'), archiveDir: path.join(dir, 'a'), html: path.join(dir, 'war-room.html'), gmPin: '4242'});
-  await new Promise(res => srv.listen(0, '127.0.0.1', res));
-  t.after(() => srv.close());
-  const port = srv.address().port;
-  const write = (op, pin) => fetch(`${BASE}:${port}/write`, {method: 'POST',
-    headers: Object.assign({'content-type': 'application/json'}, pin ? {'x-gm-pin': pin} : {}), body: JSON.stringify(op)}).then(r => r.status);
-  assert.strictEqual(await write({col: 'game', doc: {status: 'ACTIVE'}}), 401);
-  assert.strictEqual(await write({col: 'game', doc: {status: 'ACTIVE'}}, '0000'), 401);
-  assert.strictEqual(await write({reset: true}), 401);
-  assert.strictEqual(await write({col: 'players', id: 'scout', doc: {name: 'Аня'}}), 204);
-  assert.strictEqual(await write({col: 'game', doc: {status: 'ACTIVE'}}, '4242'), 204);
-  const h = await getJson(port, '/healthz');
-  assert.strictEqual(h.body.gmPin, true);
-});
-
-test('статика оформления: theme.css, fonts.css и woff2 с верными типами', async (t) => {
-  const {port} = await startTmp(t);
-  const css = await fetch(`${BASE}:${port}/theme.css`);
-  assert.strictEqual(css.status, 200); assert.match(css.headers.get('content-type'), /text\/css/);
-  const fcss = await fetch(`${BASE}:${port}/fonts/fonts.css`);
-  assert.strictEqual(fcss.status, 200);
-  const file = (await fcss.text()).match(/url\(([\w.-]+\.woff2)\)/)[1];
-  const font = await fetch(`${BASE}:${port}/fonts/${file}`);
-  assert.strictEqual(font.status, 200); assert.strictEqual(font.headers.get('content-type'), 'font/woff2');
-  assert.strictEqual((await fetch(`${BASE}:${port}/fonts/../server.js`)).status, 404);
+test('реальные паки из scenarios/ загружаются сервером', () => {
+  const { loadPacks } = require('../server.js');
+  const errors = [];
+  const packs = loadPacks(path.join(__dirname, '..', 'scenarios'), m => errors.push(m));
+  assert.deepEqual(errors, []);
+  assert.deepEqual(packs.map(p => p.meta.id).sort(), ['expired-cert', 'phantom-network']);
 });

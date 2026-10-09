@@ -1,95 +1,75 @@
 const test = require('node:test');
-const assert = require('node:assert');
+const assert = require('node:assert/strict');
+const fs = require('fs'), path = require('path');
+const E = require('../workshop-engine.js');
 
-const PACKS = [];
-global.SCENARIO = (o) => PACKS.push(o);
-require('../scenarios/phantom-network.js');
-require('../scenarios/expired-cert.js');
+const ROOT = path.join(__dirname, '..');
+const CASES = [
+  {
+    file: 'phantom-network.js', doc: 'phantom-network-asymmetric.md',
+    facts: ['×1,02', '76%', 'cl_waiting 70', 'idle in transaction', 'payments.card.fallback_acquirer=true', 'лимит 300 TPS',
+      'x-client-retry-count ≥ 1', 'Exit Code: 137', 'с 14:00 до 16:00', 'nofile 4096'],
+  },
+  {
+    file: 'expired-cert.js', doc: 'expired-certificate-training.md',
+    facts: ['12:00:00', 'SSL_do_handshake() failed', '/etc/nginx/tls/old.pem', 'jackson 2.15 → 2.16', '68% трафика',
+      'ACME-секрет не найден после миграции', 'дежурный отключил cron «до разборки»', '7,4%', 'v1.9.2', 'renew-certs.sh'],
+  },
+];
 
-const REQUIRED = ['id', 'title', 'version', 'durationSec', 'winHoldSec', 'money', 'panic', 'schedule', 'roles', 'roleOrder', 'startScreens', 'artifacts', 'mitigations', 'telemetry', 'cheatsheet'];
-
-test('пак well-formed: обязательные поля, уникальные id, роли существуют, ключи K\\d+', () => {
-  assert.ok(PACKS.length >= 1, 'хотя бы один пакет зарегистрирован');
-  for (const p of PACKS) {
-    for (const f of REQUIRED) assert.ok(p[f] !== undefined, `${p.id || 'pack'}: нет поля ${f}`);
-    const ids = p.artifacts.map(a => a.id);
-    assert.strictEqual(new Set(ids).size, ids.length, `${p.id}: дубли id артефактов`);
-    const mids = p.mitigations.map(m => m.id);
-    assert.strictEqual(new Set(mids).size, mids.length, `${p.id}: дубли id действий`);
-    for (const a of p.artifacts) {
-      assert.ok(p.roles[a.role], `${p.id}/${a.id}: неизвестная роль ${a.role}`);
-      if (a.key) assert.match(a.key, /^K\d+$/, `${p.id}/${a.id}: ключ ${a.key}`);
-      assert.strictEqual(typeof a.cost, 'number');
-      assert.ok(a.body && a.body.length > 0, `${p.id}/${a.id}: пустое тело`);
-    }
-    for (const m of p.mitigations) {
-      assert.ok(p.roles[m.role], `${p.id}/${m.id}: неизвестная роль ${m.role}`);
-      assert.strictEqual(typeof m.cost, 'number');
-    }
-    for (const r of p.roleOrder) assert.ok(p.roles[r], `${p.id}: roleOrder ссылается на ${r}`);
+// Проходит кейс, выбирая вариант функцией pick(step); ведущий раскрывает выбор явно.
+function play(pack, pick) {
+  let s = E.createSession(pack), t = 0;
+  s = E.apply(pack, s, { type: 'start' }, t);
+  while (s.phase !== 'end') {
+    s = E.apply(pack, s, { type: 'voting' }, t += 1000);
+    s = E.apply(pack, s, { type: 'reveal', option: pick(pack.steps[s.stepIndex]).id }, t += 60000);
+    s = E.apply(pack, s, { type: 'next' }, t += 1000);
   }
-});
+  return s;
+}
+const best = st => E.bestOption(st);
+const worst = st => st.options.reduce((a, o) => (o.score < a.score ? o : a));
+// Пробелы-разделители в паке неразрывные, в markdown — обычные: сравниваем без разницы.
+const norm = s => s.replace(/[  ]/g, ' ');
 
-test('phantom: инцидент err 92; M-P1+M-D2+M-P3 → err 2, mult 0', () => {
-  const p = PACKS.find(x => x.id === 'phantom-network');
-  assert.ok(p, 'пакет phantom-network зарегистрирован');
-  const incident = p.telemetry({applied: [], status: 'ACTIVE'});
-  assert.strictEqual(incident.err, 92);
-  assert.strictEqual(incident.mult, 1);
-  const fixed = p.telemetry({applied: ['M-P1', 'M-D2', 'M-P3'], cleared: true, status: 'ACTIVE'});
-  assert.strictEqual(fixed.err, 2);
-  assert.strictEqual(fixed.mult, 0);
-  const flagOnly = p.telemetry({applied: ['M-D2'], cleared: false, status: 'ACTIVE'});
-  assert.strictEqual(flagOnly.err, 92, 'флаг без рестарта не лечит');
-  assert.match(flagOnly.label, /нужен рестарт/);
-});
+for (const c of CASES) {
+  const pack = require(path.join(ROOT, 'scenarios', c.file));
+  const id = pack.meta.id;
 
-test('cert: инцидент err 7; M-P1 → err 99 mult 0; M-P2 → err 95; T-ROLL не меняет err', () => {
-  const p = PACKS.find(x => x.id === 'expired-cert');
-  assert.ok(p, 'пакет expired-cert зарегистрирован');
-  assert.strictEqual(p.durationSec, 720);
-  assert.strictEqual(p.money.failAt, 3000000);
-  const incident = p.telemetry({applied: [], status: 'ACTIVE'});
-  assert.strictEqual(incident.err, 93);
-  assert.strictEqual(incident.mult, 1);
-  const fixed = p.telemetry({applied: ['M-P1'], status: 'ACTIVE'});
-  assert.strictEqual(fixed.err, 1);
-  assert.strictEqual(fixed.mult, 0);
-  const quick = p.telemetry({applied: ['M-P2'], status: 'ACTIVE'});
-  assert.strictEqual(quick.err, 5);
-  assert.match(quick.label, /временн/i);
-  const trap = p.telemetry({applied: ['T-ROLL'], status: 'ACTIVE'});
-  assert.strictEqual(trap.err, 93, 'ловушка не лечит');
-});
+  test(`${id}: пак проходит валидатор`, () => {
+    assert.deepEqual(E.validate(pack), []);
+  });
 
-test('пак: графики проектора ссылаются на числовые поля телеметрии, rootCause — RegExp', () => {
-  for (const p of PACKS) {
-    const tel = p.telemetry({applied: []});
-    for (const c of (p.charts || [])) {
-      assert.strictEqual(typeof tel[c.key], 'number', `${p.id}: график ${c.key} — нет числового поля в telemetry`);
-      const max = typeof c.max === 'function' ? c.max(tel) : c.max;
-      assert.ok(max > 0, `${p.id}: график ${c.key} без max`);
-      assert.match(c.color, /^#[0-9a-f]{6}$/i, `${p.id}: график ${c.key} — цвет #rrggbb (к нему дописывается альфа)`);
+  test(`${id}: лучший путь — высшая оценка и потери в пределах лимита`, () => {
+    const s = play(pack, best);
+    const sum = E.summary(pack, s);
+    assert.equal(sum.score, E.maxScore(pack));
+    assert.equal(sum.grade.label, pack.end.grades.slice().sort((a, b) => b.min - a.min)[0].label);
+    assert.ok(s.metrics.money <= pack.meta.moneyLimit, `потери ${s.metrics.money} > лимита ${pack.meta.moneyLimit}`);
+  });
+
+  test(`${id}: худший путь — низшая оценка и потери сверх лимита`, () => {
+    const s = play(pack, worst);
+    assert.equal(s.score, E.minScore(pack));
+    assert.equal(E.summary(pack, s).grade.label, pack.end.grades.slice().sort((a, b) => a.min - b.min)[0].label);
+    assert.ok(s.metrics.money > pack.meta.moneyLimit, 'плохая игра должна пробивать лимит потерь');
+  });
+
+  test(`${id}: ключевые факты совпадают с markdown-документом`, () => {
+    const packText = norm(fs.readFileSync(path.join(ROOT, 'scenarios', c.file), 'utf8'));
+    const docText = norm(fs.readFileSync(path.join(ROOT, c.doc), 'utf8'));
+    for (const f of c.facts) {
+      assert.ok(packText.includes(f), `«${f}» нет в паке`);
+      assert.ok(docText.includes(f), `«${f}» нет в ${c.doc}`);
     }
-    if (p.rootCause !== undefined) assert.ok(p.rootCause instanceof RegExp, `${p.id}: rootCause не RegExp`);
-    for (const f of (p.manualFlags || [])) assert.match(f.key, /^\w+$/, `${p.id}: manualFlags.key`);
-  }
-});
+  });
 
-test('пак: таблица ивентов мира — d10 (индексы 1–10), пустые клетки допустимы', () => {
-  for (const p of PACKS) {
-    const we = p.schedule.worldEvents;
-    if (!we) continue;
-    assert.ok(we.table.length <= 11, `${p.id}: в таблице больше 10 исходов`);
-    for (const e of we.table.slice(1)) if (e) assert.ok(e.t, `${p.id}: ивент без заголовка t`);
-  }
-});
-
-test('пак: откат релиза — обратимая мера, не ловушка; фича-флаги обратимы', () => {
-  for (const p of PACKS) {
-    for (const m of p.mitigations) {
-      if (/^Откатить/.test(m.title)) assert.ok(!m.trap && m.reversible, `${p.id}/${m.id}: откат должен быть reversible и не trap`);
-      if (m.trap) assert.ok(!m.reversible, `${p.id}/${m.id}: ловушка не может быть обратимой «бесплатно»`);
+  test(`${id}: проектор не подсказывает ответ — тексты для зала без «ловушка» и «правильн»`, () => {
+    for (const st of pack.steps) {
+      for (const t of [st.brief, st.question || ''].concat(st.options.map(o => o.label))) {
+        assert.ok(!/ловушк|правильн|лучший ход/i.test(t), `шаг ${st.id}: «${t.slice(0, 60)}»`);
+      }
     }
-  }
-});
+  });
+}

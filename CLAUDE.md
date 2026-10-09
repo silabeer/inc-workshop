@@ -72,8 +72,8 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 - Тесты: `npm test` (= `node --test`). Всё должно быть зелёным перед коммитом.
 - Правки интерфейса: сначала скилл `inc-workshop-ui`, после — `npm run test:ui` и просмотр скриншотов в `test-ui/out/`.
-- Запуск: `npm start` (= `node server.js`), холл-режим работает и без сервера (`hall.html` по file://).
-- Движки (`engine.js`, `hall-engine.js`) — UMD, только чистые функции без DOM/сети/дат; логику, которую можно протестировать, выносим туда.
-- Контент — `scenarios/*.js`, саморегистрация через `SCENARIO(...)` / `HALL_SCENARIO(...)`. Схемы: `docs/scenario-authoring.md`.
+- Запуск: `GM_PIN=4821 npm start` (= `node server.js`): проектор `/#screen`, пульт `/#gm`, телефоны ролей `/#play`.
+- Движок `workshop-engine.js` — UMD, только чистые функции без DOM/сети/дат; логику, которую можно протестировать, выносим туда. Сервер — источник правды: браузер шлёт команды и получает своё представление, паки в браузер не уходят.
+- Контент — `scenarios/*.js`, один пак на кейс (`module.exports`). Формат и правила: `docs/scenario-authoring.md`, проверка: `npm run validate`.
 - Весь UI-текст и имена ролей — на русском.
 - Сборки, бандлера и npm-зависимостей нет и не будет без явного решения.

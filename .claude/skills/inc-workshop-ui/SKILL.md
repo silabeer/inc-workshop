@@ -1,17 +1,18 @@
 ---
 name: inc-workshop-ui
-description: Design rules and visual QA for the inc-workshop UI (hall.html and war-room.html). Use before changing any markup, CSS, colors, fonts, layout or copy in these pages, when adding a screen, or when asked to review/fix the UI. Covers shared design tokens, projector and phone constraints, no-spoiler rule for the hall screen, Russian-only copy, and the screenshot test loop (npm run test:ui).
+description: Design rules and visual QA for the inc-workshop UI (index.html and ui/*.js — projector, role phone, facilitator console, print cards). Use before changing any markup, CSS, colors, fonts, layout or copy, when adding a screen, or when asked to review/fix the UI. Covers shared design tokens, projector and phone constraints, the no-spoiler rule for the projector, Russian-only copy, and the screenshot test loop (npm run test:ui).
 ---
 
 # inc-workshop UI
 
-Два интерфейса для живого воркшопа: **холл** (`hall.html`, один проектор в зале, ведущий у ноутбука)
-и **war-room** (`war-room.html`: проектор, пульт ведущего, телефоны игроков). Они — один продукт
-и выглядят как один продукт.
+Один воркшоп, три экрана из одного состояния на сервере (`index.html`, код в `ui/`):
+**проектор** (`#screen`, ui/screen.js), **телефон роли** (`#play`, ui/play.js),
+**пульт ведущего** (`#gm`, ui/gm.js) и карточки для печати (`#cards`). Общие помощники —
+`ui/common.js` (построение DOM только через `h()`, без innerHTML с данными).
 
 ## Дизайн-система
 
-Токены живут в `theme.css` (подключают обе страницы), шрифты — локально в `fonts/` (`fonts.css`):
+Токены живут в `theme.css`, шрифты — локально в `fonts/` (`fonts.css`):
 залы часто без интернета. Не вводите новые цвета и шрифты мимо `theme.css`.
 
 | Токен | Смысл |
@@ -23,8 +24,7 @@ description: Design rules and visual QA for the inc-workshop UI (hall.html and w
 | `--tag` | жёлтый «пейджер»: кто ведёт шаг, главный акцент. Один на экран |
 | `--info` | нейтральный акцент данных (графики, ссылки) |
 
-- Холл — светлая тема по умолчанию (проектор в освещённом зале), тёмная по `T`.
-  War-room — тёмная тема (`<html data-theme="dark">`).
+- Светлая тема по умолчанию (проектор в освещённом зале); `T` на проекторе и пульте — тёмная.
 - Шрифты: **Fira Sans Condensed** — заголовки, крупные числа, кнопки; **IBM Plex Sans** — текст;
   **IBM Plex Mono** — только сырые данные (артефакты, логи, таймеры).
 - Подписи — обычным регистром. Никаких КАПСОВЫХ разреженных подписей над каждым блоком.
@@ -42,28 +42,28 @@ description: Design rules and visual QA for the inc-workshop UI (hall.html and w
 - кнопки и вкладки ≥ 44 px в высоту;
 - шапка компактная: экран телефона — для данных роли.
 
-**Экран зала в холле не подсказывает ответ.** `roleTask` формулирует решение, а не ответ;
-ожидаемое поведение — в `facilitator` и `say`, которые видит только экран ведущего (`#presenter`).
+**Проектор не подсказывает ответ.** Он получает от сервера только `brief`, `question` и тексты
+вариантов; очки, ловушки, `debrief` и `hint` есть только в представлении пульта. Приватка роли —
+только на её телефоне. Не добавляйте в представление проектора поля «на всякий случай».
 
 ## Текст
 
 - Только русский: статусы, кнопки, подписи. `ACTIVE`, `pending`, `refuted` — нельзя.
   Термины SRE (TTM, SEV, Go) допустимы, если их произносят в комнате.
 - Кнопка говорит, что произойдёт: «Закрыть инцидент», а не «OK».
-- Разрушительные действия («Сбросить всё») — отдельно от частых (≥ 200 px), с подтверждением.
+- Разрушительные действия («Новая партия», «Перейти к итогам», «Освободить») — отдельно от частых (≥ 200 px), с подтверждением.
 
-## Графики (см. скилл `dataviz`)
+## Шкалы метрик
 
-- Тонкая линия 2 px, лёгкая заливка; шкала значений по оси Y (минимум 0 и максимум).
-- Никакого выдуманного шума поверх данных: колебания только когда их задаёт состояние игры (`transient`).
-- Порог, к которому стремится команда (окно победы по ошибкам), — линией с подписью.
-- Шкала не прыгает: `max` фиксирован в паке.
+- Напряжение, потери и время восстановления — горизонтальные шкалы с числом; потери — от лимита кейса.
+- На раскрытии шкала доезжает от прежнего значения к новому, рядом — дельта (`+450 тыс ₽`).
+- Цвет шкалы — статус (норма / деградация / сбой), не декор. Шкала не прыгает: максимум задан паком.
 
 ## Проверка — обязательно после любой правки UI
 
 ```bash
-npm test          # статические проверки hall.html и движков
-npm run test:ui   # Playwright: контраст, кегли, 720p, телефон, русские статусы; скриншоты в test-ui/out/
+npm test          # движок, сервер, паки
+npm run test:ui   # Playwright: целая партия на трёх экранах — контраст, кегли, 720p, телефон; скриншоты в test-ui/out/
 ```
 
 Потом **откройте скриншоты из `test-ui/out/` и посмотрите глазами**: проверки ловят регрессии,

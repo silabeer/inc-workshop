@@ -1,8 +1,8 @@
 {
   "name": "inc-workshop",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Тренажёр инцидент-респонса для живых воркшопов: холл-режим и war-room",
+  "description": "Тренажёр инцидент-респонса для живых воркшопов: проектор, телефоны пяти ролей и пульт ведущего",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=18"
@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "test:ui": "node test-ui/run.js"
+    "test:ui": "node test-ui/run.js",
+    "validate": "node tools/validate.js"
   }
 }
