@@ -1,0 +1,20 @@
+/* Общие токены холла и war-room. Правила — .claude/skills/inc-workshop-ui/SKILL.md.
+   Весь текст (--ink, --muted, --dim) держит ≥ 4.5:1 на --paper, --sheet и --raised в обеих темах.
+   Светлая — по умолчанию (холл на проекторе в освещённом зале); war-room ставит data-theme="dark". */
+:root {
+  --paper: #EEF2F6; --sheet: #FFFFFF; --raised: #F6F8FA; --sunken: #E6EBF1;
+  --ink: #0F1E33; --muted: #56677D; --dim: #5E6D80; --rule: #C9D2DD; --rule-strong: #A9B5C4;
+  --sev: #C8102E; --warn: #B86E00; --ok: #18794E; --info: #1F6FB2; --tag: #FFD84D; --tag-ink: #0F1E33;
+  --sev-bg: #FBE5E8; --warn-bg: #FBEFD9; --ok-bg: #E1F2E9; --info-bg: #E2EEF8; --idle-bg: #E6EBF1;
+  --cond: "Fira Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --paper: #0D1520; --sheet: #142030; --raised: #1C2A3D; --sunken: #0A111A;
+  --ink: #E6EDF5; --muted: #8C9DB2; --dim: #8494AA; --rule: #2A3B50; --rule-strong: #3B5068;
+  --sev: #FF5A6A; --warn: #F2A93B; --ok: #3FC48A; --info: #5FB8F0; --tag: #FFD84D; --tag-ink: #0F1E33;
+  --sev-bg: #3A1820; --warn-bg: #3A2A12; --ok-bg: #12322A; --info-bg: #12283D; --idle-bg: #1C2A3D;
+  color-scheme: dark;
+}

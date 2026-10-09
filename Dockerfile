@@ -1,7 +1,8 @@
 # Без зависимостей: только рантайм Node и файлы приложения.
 FROM node:22-alpine
 WORKDIR /app
-COPY server.js engine.js hall-engine.js war-room.html hall.html ./
+COPY server.js engine.js hall-engine.js war-room.html hall.html theme.css ./
+COPY fonts ./fonts
 COPY scenarios ./scenarios
 # state.json и archive/ — в томе, чтобы переживать пересоздание контейнера.
 RUN mkdir -p /app/data && chown node:node /app/data

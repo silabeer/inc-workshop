@@ -5,26 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Инцидент-тренировка</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230F1E33'/%3E%3Crect x='6' y='18' width='5' height='8' fill='%23FFD84D'/%3E%3Crect x='13.5' y='12' width='5' height='14' fill='%23FFD84D'/%3E%3Crect x='21' y='6' width='5' height='20' fill='%23C8102E'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="theme.css">
 <style>
-  /* Тема по умолчанию — светлая: проектор в освещённом зале читает тёмный текст на светлом лучше.
-     Тёмная — клавиша T (затемнённые залы, стримы). */
-  :root {
-    --paper: #EEF2F6; --sheet: #FFFFFF; --ink: #0F1E33; --muted: #56677D; --rule: #C9D2DD;
-    --sev: #C8102E; --warn: #B86E00; --ok: #18794E; --tag: #FFD84D; --tag-ink: #0F1E33;
-    --sev-bg: #FBE5E8; --warn-bg: #FBEFD9; --ok-bg: #E1F2E9; --idle-bg: #E6EBF1;
-    --cond: "Fira Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
-    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    color-scheme: light;
-  }
-  :root[data-theme="dark"] {
-    --paper: #0D1520; --sheet: #142030; --ink: #E6EDF5; --muted: #8C9DB2; --rule: #2A3B50;
-    --sev: #FF5A6A; --warn: #F2A93B; --ok: #3FC48A; --tag: #FFD84D; --tag-ink: #0F1E33;
-    --sev-bg: #3A1820; --warn-bg: #3A2A12; --ok-bg: #12322A; --idle-bg: #1C2A3D;
-    color-scheme: dark;
-  }
+  /* Токены цветов и шрифтов — theme.css (общий с war-room). */
   * { box-sizing: border-box; }
   /* Кегль зависит и от ширины, и от высоты: на проекторе 1280×720 всё должно влезать без прокрутки. */
   html { font-size: clamp(14px, min(1.12vw + 4px, 1.9vh + 3px), 24px); }
@@ -94,7 +78,7 @@
   .gauge .fill { position: absolute; left: 0; right: 0; bottom: 0; transition: height .6s cubic-bezier(.3,.7,.2,1), background .6s; }
   /* Отметка стартового уровня: видно, стало ли лучше или хуже, чем в начале инцидента. */
   .gauge .base { position: absolute; left: -2px; right: -2px; bottom: 50%; border-top: 2px dashed var(--ink); opacity: .55; }
-  .gauge .cap { writing-mode: vertical-rl; transform: rotate(180deg); font-size: .78rem; color: var(--muted); font-family: var(--cond); font-weight: 600; }
+  .gauge .cap { writing-mode: vertical-rl; transform: rotate(180deg); font-size: .92rem; color: var(--muted); font-family: var(--cond); font-weight: 600; }
   .t-low { background: var(--ok); } .t-mid { background: var(--warn); } .t-high { background: var(--sev); }
   .c-low { color: var(--ok); } .c-mid { color: var(--warn); } .c-high { color: var(--sev); }
 
@@ -104,7 +88,7 @@
   .score { display: flex; gap: 1.8rem; align-items: baseline; }
   .score div { font-family: var(--cond); font-weight: 600; color: var(--muted); }
   .score b { font-size: 1.9rem; color: var(--ink); margin-left: .35rem; }
-  .score .traps b { color: var(--sev); }
+  .score .traps.has b { color: var(--sev); }
 
   /* Плашка «шаг ведёт» — жёлтая, как назначение на пейджере. Главный акцент экрана. */
   .handoff { display: flex; align-items: stretch; margin: 1.1rem 0 .9rem; border-radius: 6px; overflow: hidden; max-width: 100%; width: fit-content; }
@@ -138,7 +122,7 @@
   .d-edge { stroke: var(--muted); stroke-width: 1.8; fill: none; }
   .d-arrow { fill: var(--muted); }
   .d-elabel { fill: var(--muted); font: 13px var(--sans); text-anchor: middle; paint-order: stroke; stroke: var(--sheet); stroke-width: 4px; }
-  svg.has-focus .d-node { opacity: .45; }
+  svg.has-focus .d-node { opacity: .62; }
   svg.has-focus .d-node.focus { opacity: 1; }
   .d-node.focus .d-box { stroke: var(--ink); stroke-width: 3.5; }
   .legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .85rem; color: var(--muted); margin-top: .5rem; }
@@ -553,7 +537,9 @@
   function renderStats() {
     text('teamLabel', state.team);
     text('scoreVal', String(state.score).replace('-', '−'));
-    text('trapVal', state.log.filter(function (l) { return l.trap; }).length);
+    var traps = state.log.filter(function (l) { return l.trap; }).length;
+    text('trapVal', traps);
+    $('trapVal').parentNode.classList.toggle('has', traps > 0); // красный — только когда есть ловушки
     var cls = tensionClass(state.tension);
     var num = $('tensionNum'); num.textContent = state.tension; num.className = 'num c-' + cls;
     var fill = $('tensionFill');

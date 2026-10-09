@@ -173,3 +173,15 @@ test('PIN ведущего: game и reset без верного x-gm-pin — 401
   const h = await getJson(port, '/healthz');
   assert.strictEqual(h.body.gmPin, true);
 });
+
+test('статика оформления: theme.css, fonts.css и woff2 с верными типами', async (t) => {
+  const {port} = await startTmp(t);
+  const css = await fetch(`${BASE}:${port}/theme.css`);
+  assert.strictEqual(css.status, 200); assert.match(css.headers.get('content-type'), /text\/css/);
+  const fcss = await fetch(`${BASE}:${port}/fonts/fonts.css`);
+  assert.strictEqual(fcss.status, 200);
+  const file = (await fcss.text()).match(/url\(([\w.-]+\.woff2)\)/)[1];
+  const font = await fetch(`${BASE}:${port}/fonts/${file}`);
+  assert.strictEqual(font.status, 200); assert.strictEqual(font.headers.get('content-type'), 'font/woff2');
+  assert.strictEqual((await fetch(`${BASE}:${port}/fonts/../server.js`)).status, 404);
+});

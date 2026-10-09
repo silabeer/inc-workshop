@@ -128,7 +128,7 @@ HALL_SCENARIO({
 
 | Поле | Зачем |
 | --- | --- |
-| `charts` | Графики проектора: `[{key, title, max, color, unit?, digits?, idle?, transient?, jitter?, format?(v, tel), side?(tel)}]`. `key` — числовое поле `telemetry()`, `max` — число или функция от телеметрии, `color` — `#rrggbb`. Без поля показывается один график ошибок |
+| `charts` | Графики проектора: `[{key, title, max, color, unit?, digits?, idle?, transient?, ref?, format?(v, tel), side?(tel)}]`. `key` — числовое поле `telemetry()`, `max` — фиксированное число (шкала не прыгает), `color` — `#rrggbb`, `ref: {value, label}` — линия-ориентир (у `err` порог победы рисуется автоматически). Шума поверх данных нет: колебания только во время `transient`. Без поля показывается один график ошибок |
 | `manualFlags` | Переключатели на пульте ведущего: `[{key, label, on, off?}]`, пишут `game[key]` |
 | `rootCause` | RegExp настоящей причины: постмортем ищет её первое упоминание в ленте |
 | `hints` | Чек-листы ролей для учебного режима |

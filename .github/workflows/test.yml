@@ -12,3 +12,21 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm test
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/playwright install --with-deps chromium
+      - run: npm run test:ui
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: test-ui/out/

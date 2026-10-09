@@ -70,7 +70,7 @@
     const fail = (why) => {
       patch.status = 'FAILED'; patch.endedSec = Math.round(T);
       if (game.call && game.call.active) patch.call = Object.assign({}, game.call, {active: false});
-      events.push({msg: 'FAILED: ' + why, sev: 'danger'});
+      events.push({msg: 'Провал: ' + why, sev: 'danger'});
       return {patch, events, props};
     };
 

@@ -188,9 +188,9 @@ TLS / сетевое / конфиг   не тронуты`},
 
   // Проектор: графики по полям telemetry(); side — подпись справа от заголовка.
   charts:[
-    {key:'err',title:'TLS handshake failure · edge',max:100,color:'#ff4d4f',unit:' %',digits:1,idle:0.3,transient:50,jitter:2,
+    {key:'err',title:'TLS handshake failure на edge',max:100,color:'#ff5a6a',unit:' %',digits:1,idle:0.3,transient:50,
      side:t=>'success '+Math.max(0,100-t.err)+' %'},
-    {key:'rps',title:'RPS на edge',max:3000,color:'#4fc3f7',idle:2000,jitter:60,
+    {key:'rps',title:'RPS на edge',max:3000,color:'#5fb8f0',idle:2000,
      format:v=>new Intl.NumberFormat('ru-RU').format(Math.round(v))},
   ],
   // Первое упоминание настоящей причины в ленте — метрика постмортема.

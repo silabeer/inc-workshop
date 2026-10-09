@@ -1,19 +1,17 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>War room — интерактивный воркшоп</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230F1E33'/%3E%3Crect x='6' y='18' width='5' height='8' fill='%23FFD84D'/%3E%3Crect x='13.5' y='12' width='5' height='14' fill='%23FFD84D'/%3E%3Crect x='21' y='6' width='5' height='20' fill='%23C8102E'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="theme.css">
 <style>
 :root{
-  --bg:#0b0e12;--bg2:#10151c;--panel:#151b23;--panel2:#1b232d;--line:#26303c;--line2:#34404e;
-  --text:#e6eaf0;--muted:#8b96a5;--dim:#5c6673;
-  --amber:#f5a524;--red:#ff4d4f;--green:#2fd07a;--cyan:#4fc3f7;--violet:#b48cff;
-  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  color-scheme:dark;
+  /* Цвета и шрифты — из theme.css (общий с холлом); здесь только локальные имена. */
+  --bg:var(--paper);--bg2:var(--sunken);--panel:var(--sheet);--panel2:var(--raised);--line:var(--rule);--line2:var(--rule-strong);
+  --text:var(--ink);--amber:var(--warn);--red:var(--sev);--green:var(--ok);--cyan:var(--info);--violet:#B794F6;
 }
 *{box-sizing:border-box}
 html,body,#app{height:100%}
@@ -23,19 +21,19 @@ button{font:inherit;color:inherit;background:var(--panel2);border:1px solid var(
 button:hover{border-color:var(--muted)}
 button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 button:disabled{opacity:.4;cursor:not-allowed}
-button.primary{background:var(--amber);color:#1a1200;border-color:var(--amber);font-weight:600}
+button.primary{background:var(--tag);color:var(--tag-ink);border-color:var(--tag);font-weight:600}
 button.danger{background:#3a1416;border-color:#7a2a2e;color:#ffb3b5}
 button.ok{background:#12351f;border-color:#1f6b3c;color:#a7f0c3}
 button.sm{padding:4px 9px;font-size:13px;border-radius:5px}
 input,textarea,select{font:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--line2);border-radius:6px;padding:8px 10px;width:100%}
 textarea{resize:vertical;min-height:70px}
-pre{font-family:var(--mono);font-size:12.5px;line-height:1.5;background:#0a0d11;border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:0;white-space:pre}
-code{font-family:var(--mono);font-size:.92em;background:#0a0d11;padding:1px 5px;border-radius:4px}
+pre{font-family:var(--mono);font-size:12.5px;line-height:1.5;background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:0;white-space:pre}
+code{font-family:var(--mono);font-size:.92em;background:var(--bg2);padding:1px 5px;border-radius:4px}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .muted{color:var(--muted)}.dim{color:var(--dim)}
-.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.eyebrow{font-family:var(--cond);font-size:15px;color:var(--muted);font-weight:600}
 .wrap{max-width:1100px;margin:0 auto;padding:20px 16px}
-h1,h2,h3{margin:0;line-height:1.2;text-wrap:balance}
+h1,h2,h3{margin:0;line-height:1.15;text-wrap:balance;font-family:var(--cond)}
 h1{font-size:28px;font-weight:700}h2{font-size:18px;font-weight:600}h3{font-size:15px;font-weight:600}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .stack{display:flex;flex-direction:column;gap:10px}
@@ -46,7 +44,7 @@ h1{font-size:28px;font-weight:700}h2{font-size:18px;font-weight:600}h3{font-size
 .pill.green{color:#a7f0c3;border-color:#1f6b3c;background:#0f2a1a}
 .pill.cyan{color:#bfe9ff;border-color:#1f5a7a;background:#0f2230}
 .pill.violet{color:#e2d4ff;border-color:#5a3f8a;background:#1e1530}
-.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(11,14,18,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--paper) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .bar .clock{font-family:var(--mono);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
 .bar .money{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--amber)}
 .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto}
@@ -64,7 +62,7 @@ h1{font-size:28px;font-weight:700}h2{font-size:18px;font-weight:600}h3{font-size
 .k{font-family:var(--mono);font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:#2a2010;color:#ffd58a;border:1px solid #7a5a1e}
 .wallcard{background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--line2);border-radius:6px;padding:8px 10px;font-size:14px}
 .wallcard.key{border-left-color:var(--amber)}
-.wallcard .who{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;display:flex;justify-content:space-between;gap:8px}
+.wallcard .who{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{font-size:12px;padding:3px 8px;border:1px solid var(--line2);border-radius:999px;cursor:pointer;background:var(--bg2)}
 .chip.on{border-color:var(--amber);color:#ffd58a;background:#2a2010}
@@ -75,46 +73,64 @@ h1{font-size:28px;font-weight:700}h2{font-size:18px;font-weight:600}h3{font-size
 .rolecard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;text-align:left;display:flex;flex-direction:column;gap:6px}
 .rolecard b{font-size:16px}
 .rolecard.taken{opacity:.55}
+.rolecard .pill{align-self:flex-start}
 .hint{font-size:13px;color:var(--muted)}
 .status-tier{font-family:var(--mono);font-size:13px}
-/* projector */
-.proj{height:100%;display:grid;grid-template-rows:auto 1fr;background:#07090c;color:#e6eaf0}
-.proj .top{display:flex;align-items:center;gap:28px;padding:14px 28px;border-bottom:1px solid #1d242d;flex-wrap:wrap}
-.proj .top .clock{font-family:var(--mono);font-size:64px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:.02em}
-.proj .top .money{font-family:var(--mono);font-size:44px;font-weight:600;color:var(--amber);font-variant-numeric:tabular-nums;line-height:1}
-.proj .top .lbl{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-.proj .main{display:grid;grid-template-columns:34% 36% 30%;gap:0;min-height:0}
-.proj .col{padding:18px 22px;border-right:1px solid #1d242d;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:14px}
+/* projector: читается с 10 м на 1080p — стена улик главная, паника компактно в шапке */
+.proj{height:100%;display:grid;grid-template-rows:auto 1fr;background:var(--paper);color:var(--ink)}
+.proj .top{display:flex;align-items:center;gap:36px;padding:14px 28px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.proj .top .clock{font-family:var(--mono);font-size:64px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.proj .top .money{font-family:var(--cond);font-size:52px;font-weight:700;color:var(--amber);line-height:1}
+.proj .top .lbl{font-family:var(--cond);font-size:17px;font-weight:600;color:var(--muted)}
+.proj .main{display:grid;grid-template-columns:minmax(0,38fr) minmax(0,62fr);min-height:0}
+.proj .col{padding:18px 24px;border-right:1px solid var(--line);min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:14px}
 .proj .col:last-child{border-right:0}
-.panic{display:flex;gap:12px;align-items:stretch;flex:1;min-height:0}
-.panic .segs{display:flex;flex-direction:column-reverse;gap:4px;width:64px}
-.panic .segs i{flex:1;background:#1a222c;border-radius:3px;border:1px solid #232d38}
-.panic .segs i.on{background:var(--green);border-color:transparent}
-.panic .segs i.on.a{background:var(--amber)}
-.panic .segs i.on.r{background:var(--red)}
-.panic .segs i.on.m{background:#ff1a1a;box-shadow:0 0 12px #ff1a1a}
-.panic .info{display:flex;flex-direction:column;gap:10px;justify-content:center}
-.panic .num{font-family:var(--mono);font-size:96px;font-weight:600;line-height:1}
-.panic .tier{font-size:22px;font-weight:600}
-.penalty{background:#151b23;border:1px solid #26303c;border-radius:8px;padding:12px 16px;font-family:var(--mono);font-size:20px}
-.chart{background:#0c1015;border:1px solid #1d242d;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;flex:1;min-height:0}
-.chart .t{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
-.chart .v{font-family:var(--mono);font-size:26px;font-weight:600}
+.proj .eyebrow{font-size:20px}
+.pmeter{display:flex;flex-direction:column;gap:6px;min-width:330px}
+.pmeter .row1{display:flex;align-items:baseline;gap:12px}
+.pmeter .num{font-family:var(--cond);font-size:52px;font-weight:700;line-height:1}
+.pmeter .tier{font-family:var(--cond);font-size:22px;font-weight:600}
+.pmeter .segs{display:flex;gap:3px;height:14px}
+.pmeter .segs i{flex:1;background:var(--panel2);border-radius:2px}
+.pmeter .segs i.on{background:var(--green)}.pmeter .segs i.on.a{background:var(--amber)}.pmeter .segs i.on.r{background:var(--red)}
+.pmeter .segs i.on.m{background:var(--red);box-shadow:0 0 10px var(--red)}
+.pmeter .sub{font-size:16px;color:var(--muted)}
+.chart{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;flex:1;min-height:0}
+.chart .t{display:flex;justify-content:space-between;gap:12px;font-family:var(--cond);font-size:20px;font-weight:600;color:var(--muted)}
+.chart .v{font-family:var(--cond);font-size:34px;font-weight:700;line-height:1.1}
 .chart canvas{width:100%;height:100%;flex:1;min-height:60px}
-.wall{display:flex;flex-direction:column;gap:6px;overflow:hidden;flex:1;min-height:0}
+.proj .applied{font-size:18px;color:var(--muted)}
+.proj .wall{display:flex;flex-direction:column;gap:10px;overflow:hidden;flex:1;min-height:0}
+.proj .wallcard{font-size:24px;line-height:1.35;padding:12px 16px;border-left-width:5px}
+.proj .wallcard .who{font-size:17px}
+.proj .wallcard .k{font-size:16px}
+.proj .feed{font-family:var(--sans);font-size:18px;gap:6px;flex:0 0 auto;max-height:34%}
+.proj .feed div{white-space:normal;overflow:visible;line-height:1.35}
 .feed{font-family:var(--mono);font-size:12.5px;display:flex;flex-direction:column;gap:3px;overflow:hidden;flex:1;min-height:0}
 .feed div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .feed .warn,.feed .warning{color:#ffd58a}.feed .danger{color:#ffb3b5}.feed .success{color:#a7f0c3}.feed .info{color:var(--muted)}
-.overlay{position:fixed;inset:0;background:rgba(3,5,8,.86);display:flex;align-items:center;justify-content:center;z-index:40;padding:20px}
-.overlay .callcard{background:#141a22;border:2px solid var(--red);border-radius:16px;padding:40px 56px;text-align:center;box-shadow:0 0 80px rgba(255,77,79,.35);animation:ring 1.2s ease-in-out infinite}
-.overlay .callcard .who{font-size:44px;font-weight:700}
+.overlay{position:fixed;inset:0;background:color-mix(in srgb,var(--paper) 88%,transparent);display:flex;align-items:center;justify-content:center;z-index:40;padding:20px}
+.overlay .callcard{background:var(--panel);border:2px solid var(--red);border-radius:16px;padding:40px 56px;text-align:center;box-shadow:0 0 80px rgba(255,77,79,.35);animation:ring 1.2s ease-in-out infinite}
+.overlay .callcard .who{font-family:var(--cond);font-size:48px;font-weight:700}
 .overlay .callcard .cd{font-family:var(--mono);font-size:80px;font-weight:600;color:var(--red);line-height:1.1}
 @keyframes ring{0%,100%{transform:scale(1)}50%{transform:scale(1.015)}}
 .overlay.end .callcard{border-color:var(--green);box-shadow:0 0 80px rgba(47,208,122,.3);animation:none}
 .overlay.end.fail .callcard{border-color:var(--red)}
 .qr{background:#fff;padding:8px;border-radius:6px;display:inline-block}
 .gmgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media (max-width:900px){.gmgrid{grid-template-columns:1fr}.proj .main{grid-template-columns:1fr;overflow:auto}.proj .col{border-right:0;border-bottom:1px solid #1d242d}.proj .top .clock{font-size:40px}.proj .top .money{font-size:28px}}
+@media (max-width:900px){.gmgrid{grid-template-columns:1fr}.proj .main{grid-template-columns:1fr;overflow:auto}.proj .col{border-right:0;border-bottom:1px solid var(--line)}.proj .top .clock{font-size:40px}.proj .top .money{font-size:28px}.pmeter{min-width:0}}
+/* Телефон: данные не режутся, всё нажимается пальцем (≥ 44 px), шапка компактная. */
+@media (max-width:640px){
+  pre{white-space:pre-wrap;word-break:break-word;font-size:12px}
+  button,.tabs button,select{min-height:44px}
+  .chip{min-height:36px;display:inline-flex;align-items:center}
+  .tabs{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;overflow:visible}
+  .tabs button{padding:8px 4px;font-size:14px;text-align:center}
+  .bar{gap:6px 10px;padding:8px 12px}
+  .bar .clock{font-size:18px}
+  .bar .status-tier{font-size:12px;width:100%;order:9}
+  .bar .pill{font-size:11px}
+}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
 .kv b{font-weight:500;color:var(--muted)}
@@ -299,7 +315,7 @@ async function runAutopilot(){
   }catch(e){/* 409 или сеть: свежее состояние придёт по SSE, следующий тик пересчитает */}
   finally{autoBusy=false;}
 }
-async function endGame(status,why){const g=G();await gmWrite({status,endedSec:Math.round(ENGINE.gameSec(g)),...(g.call&&g.call.active?{call:{...g.call,active:false}}:{})},(status==='RESOLVED'?'RESOLVED: ':'FAILED: ')+why,status==='RESOLVED'?'success':'danger');}
+async function endGame(status,why){const g=G();await gmWrite({status,endedSec:Math.round(ENGINE.gameSec(g)),...(g.call&&g.call.active?{call:{...g.call,active:false}}:{})},(status==='RESOLVED'?'Инцидент закрыт: ':'Провал: ')+why,status==='RESOLVED'?'success':'danger');}
 
 /* ---- Player writes ---- */
 function myPlayer(){return S.players[S.role]||null;}
@@ -375,45 +391,63 @@ function render(){
 }
 function offlineNote(){if(S.online)return '';return `<div class="card" style="border-color:#7a5a1e"><b>Нет связи с сервером.</b> Проверьте, что server.js запущен и телефон в той же сети.</div>`;}
 function modeNote(){return store.mode==='local'?`<div class="card" style="border-color:var(--line2)"><b>Режим одного браузера.</b> Файл открыт напрямую: проектор, пульт и терминалы синхронизируются между вкладками этого браузера. Чтобы игроки подключались с телефонов, запустите <code>node server.js</code> рядом с этим файлом и откройте адрес, который он напечатает.</div>`:'';}
+/* Подписи статусов: интерфейс только на русском (в состоянии — английские коды). */
+const ST={LOBBY:'лобби',ACTIVE:'идёт',PAUSED:'пауза',RESOLVED:'закрыт',FAILED:'провален'};
+const PST={pending:'ждёт Go',go:'выполняется',done:'выполнено',rejected:'отклонено'};
+const HST={open:'открыта',confirmed:'подтверждена',refuted:'опровергнута'};
+const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+const stCls=s=>s==='ACTIVE'?'red':s==='RESOLVED'?'green':'amber';
+/* Учебный режим имеет смысл, только если в паке есть подсказки или мягкое расписание. */
+const hasTraining=p=>!!(p&&((p.hints&&Object.keys(p.hints).length)||p.trainingOverrides));
 function topbar(extra=''){const g=G();const tier=ENGINE.tierOf(g.panic||0,P().panic.tiers);
-  return `<div class="bar"><span class="clock" data-clock>${fmtT(ENGINE.gameSec(g))}</span><span class="pill ${g.status==='ACTIVE'?'red':g.status==='RESOLVED'?'green':'amber'}">${g.status}</span><span class="money" data-money>${fmtRub(ENGINE.burned(g))}</span><span class="status-tier">Паника <b>${g.panic||0}</b> · ${tier.name}${tier.cost>1?' · цены ×'+String(tier.cost).replace('.',','):''}</span><span class="pill">${esc(P().title)}</span>${g.mode==='training'?'<span class="pill violet">учебный режим</span>':''}${extra}</div>`;}
+  return `<div class="bar"><span class="clock" data-clock>${fmtT(ENGINE.gameSec(g))}</span><span class="pill ${stCls(g.status)}">${ST[g.status]||g.status}</span><span class="money" data-money>${fmtRub(ENGINE.burned(g))}</span><span class="status-tier">Паника <b>${g.panic||0}</b> · ${tier.name}${tier.cost>1?' · цены ×'+String(tier.cost).replace('.',','):''}</span><span class="pill">${esc(P().title)}</span>${g.mode==='training'?'<span class="pill violet">учебный режим</span>':''}${extra}</div>`;}
 
-function packCards(){
+/* Выбор кейса — только на пульте; на главной карточки только для чтения. */
+function packCards(editable){
   const sel=lobbySel();
-  return `<div class="roles">${Object.values(window.SCENARIOS).map(p=>`<button class="rolecard" style="${sel.scenarioId===p.id?'border-color:var(--amber)':''}" onclick="setLobbySel('${p.id}',lobbySel().mode)"><b>${esc(p.title)} <span class="dim">v${p.version}</span></b><span class="hint">${esc(p.slot)}</span><span class="pill ${sel.scenarioId===p.id?'amber':''}">${sel.scenarioId===p.id?'выбран':'выбрать'}</span></button>`).join('')}</div>
-  <div class="row" style="margin-top:10px"><span class="eyebrow">Режим</span><select onchange="setLobbySel(lobbySel().scenarioId,this.value)" style="width:auto"><option value="standard" ${sel.mode==='standard'?'selected':''}>стандартный</option><option value="training" ${sel.mode==='training'?'selected':''}>учебный (с подсказками)</option></select></div>`;
+  const card=p=>{const on=sel.scenarioId===p.id;const inner=`<b>${esc(p.title)} <span class="muted">v${p.version}</span></b><span class="hint">${esc(p.slot)}</span>${on?'<span class="pill amber">выбран</span>':''}`;
+    return editable?`<button class="rolecard" aria-pressed="${on}" style="${on?'border-color:var(--amber)':''}" onclick="setLobbySel('${p.id}',hasTraining(window.SCENARIOS['${p.id}'])?lobbySel().mode:'standard')">${inner}</button>`
+      :`<div class="rolecard" style="${on?'border-color:var(--amber)':''}">${inner}</div>`;};
+  const cur=window.SCENARIOS[sel.scenarioId];const tr=hasTraining(cur);
+  return `<div class="roles">${Object.values(window.SCENARIOS).map(card).join('')}</div>
+  ${editable?`<div class="row" style="margin-top:10px"><span class="eyebrow">Режим</span><select onchange="setLobbySel(lobbySel().scenarioId,this.value)" style="width:auto"><option value="standard" ${sel.mode!=='training'?'selected':''}>стандартный</option><option value="training" ${sel.mode==='training'&&tr?'selected':''} ${tr?'':'disabled'}>учебный (с подсказками)${tr?'':' — нет в этом кейсе'}</option></select></div>`
+    :`<p class="hint" style="margin:10px 0 0">Режим: ${sel.mode==='training'&&tr?'учебный, с подсказками':'стандартный'}. Кейс и режим выбирает ведущий на пульте.</p>`}`;
 }
 
 function renderHome(){
+  autoLoadArchives();
   return `<div class="landing"><div class="box stack" style="gap:18px">
-    <div><div class="eyebrow">SRE incident tabletop</div><h1>Интерактивный воркшоп инцидентов</h1>
-    <p class="muted">Тренажёр инцидента для DevOps и SRE. Один сайт, три экрана, кейсы из контент-паков. Откройте нужный режим на своём устройстве.</p></div>
+    <div><h1>Воркшоп инцидентов: war-room</h1>
+    <p class="muted">Команда из пяти ролей тушит инцидент в реальном времени. У каждой роли своя часть данных, показывать экран нельзя, только говорить. Откройте нужный экран на своём устройстве.</p></div>
     ${offlineNote()}${modeNote()}
-    <div class="card"><div class="eyebrow">Кейс и режим — выбирает GM на пульте</div>${packCards()}</div>
     <div class="big">
-      <a href="#projector"><b>Проектор</b><span class="muted">War room: таймер, деньги, паника, графики, стена улик. Ноутбук у экрана.</span></a>
-      <a href="#gm"><b>Пульт ведущего</b><span class="muted">Выбор кейса, паника, звонок CIO, ивенты, оценка апдейтов, шпаргалка.</span></a>
-      <a href="#play"><b>Терминал игрока</b><span class="muted">Выбор роли, запросы данных, стена, действия. Телефон или ноутбук.</span></a>
+      <a href="#play"><b>Терминал игрока</b><span class="muted">Выбрать роль, запрашивать данные, выносить выводы на стену, предлагать действия. С телефона.</span></a>
+      <a href="#projector"><b>Проектор</b><span class="muted">Экран зала: время, потери, паника, графики, стена улик.</span></a>
+      <a href="#gm"><b>Пульт ведущего</b><span class="muted">Кейс, запуск, паника, звонок CIO, оценка апдейтов, разбор.</span></a>
     </div>
+    <div class="card"><div class="eyebrow" style="margin-bottom:8px">Сегодняшний кейс</div>${packCards(false)}</div>
     <div class="card row" style="justify-content:space-between"><span><b>Большой зал?</b> <span class="muted">Холл-режим: одна команда, пошаговые решения, один экран. Без телефонов и сервера.</span></span><a href="hall.html">Открыть холл-режим</a></div>
-    <div class="card"><div class="eyebrow">Правила на одном слайде</div>
-    <ol style="margin:8px 0 0;padding-left:20px" class="stack">
+    <div class="card"><div class="eyebrow">Правила</div>
+    <ul style="margin:8px 0 0;padding-left:20px" class="stack">
       <li>Время стоит денег: каждый запрос данных ждёт секунды, секунды превращаются в рубли.</li>
       <li>Показывать экран нельзя. Только голос.</li>
       <li>Сырые данные на стену не попадают — только ваш вывод в 140 знаков.</li>
       <li>Действие без привязанной улики — вслепую: +2 паники. Обратимые меры (фича-флаг, откат) можно без улик.</li>
-      <li>Победа: success ≥ 95% держится заданное время. Стоп — по хронометражу кейса.</li>
-    </ol></div>
-    <div class="card stack"><div class="row" style="justify-content:space-between"><div class="eyebrow">История игр</div><button class="sm" onclick="loadArchives()">Обновить список</button></div>${archiveListHtml()}</div>
+      <li>Победа: ошибок не больше 5% в течение заданного времени. Стоп — по хронометражу кейса.</li>
+    </ul></div>
+    <div class="card stack"><div class="row" style="justify-content:space-between"><div class="eyebrow">История игр</div><button class="sm" onclick="loadArchives()">Обновить</button></div>${archiveListHtml()}</div>
   </div></div>`;
 }
 
 /* ---------- Projector ---------- */
-/* Графики проектора описывает пакет (pack.charts); без описания — один график ошибок. */
-const DEFAULT_CHARTS=[{key:'err',title:'Ошибки',max:100,color:'#ff4d4f',unit:' %',digits:1,idle:0.3,transient:60}];
+/* Графики описывает пакет (pack.charts); без описания — один график ошибок.
+   Честно: рисуем телеметрию как есть, колебания — только при transient (его задаёт состояние игры).
+   Шкала по Y (0, середина, максимум) и линия порога (ref) — чтобы значение читалось без заголовка. */
+const DEFAULT_CHARTS=[{key:'err',title:'Ошибки',max:100,color:'#ff5a6a',unit:' %',digits:1,idle:0.3,transient:60}];
 const CHARTS=()=>P().charts||DEFAULT_CHARTS;
 const chartMax=(c,tel)=>typeof c.max==='function'?c.max(tel):c.max;
 const chartFmt=(c,v,tel)=>c.format?c.format(v,tel):(c.digits?v.toFixed(c.digits):Math.round(v))+(c.unit||'');
+const chartRef=c=>c.ref||(c.key==='err'?{value:P().winErrPct==null?5:P().winErrPct,label:'порог победы'}:null);
 let charts={};const series={};let seriesPack=null;
 function initCharts(){charts={};CHARTS().forEach(c=>{const el=document.getElementById('ch-'+c.key);if(el)charts[c.key]=el;});}
 function drawCharts(){
@@ -421,50 +455,54 @@ function drawCharts(){
   if(seriesPack!==P().id){seriesPack=P().id;Object.keys(series).forEach(k=>delete series[k]);}
   const transient=g.transientUntil&&Date.now()<g.transientUntil;
   const live=g.status==='ACTIVE'||g.status==='PAUSED';
-  const jitter=(v,j)=>v+(Math.random()-.5)*j;
+  const css=getComputedStyle(document.documentElement);const ink=css.getPropertyValue('--muted').trim()||'#8c9db2',rule=css.getPropertyValue('--rule').trim()||'#2a3b50';
   CHARTS().forEach(c=>{
-    const max=chartMax(c,tel);const real=+tel[c.key]||0;const j=c.jitter!=null?c.jitter:max*0.02;
-    let v=g.status==='LOBBY'?(c.idle!=null?c.idle:0):!live?real:(transient&&c.transient!=null?jitter(c.transient,j*3):jitter(real,j));
+    const max=chartMax(c,tel);const real=+tel[c.key]||0;
+    // transient: сервис «дышит» — значение мечется вокруг c.transient (это состояние игры, не шум ради шума)
+    let v=g.status==='LOBBY'?(c.idle!=null?c.idle:0):!live?real:(transient&&c.transient!=null?c.transient+(Math.random()-.5)*max*0.2:real);
     (series[c.key]=series[c.key]||[]).push(Math.max(0,Math.min(max,v)));
     while(series[c.key].length>240)series[c.key].shift();
     const el=charts[c.key];if(!el)return;const r=el.getBoundingClientRect();if(!r.width)return;
-    el.width=r.width*devicePixelRatio;el.height=r.height*devicePixelRatio;const x=el.getContext('2d');x.scale(devicePixelRatio,devicePixelRatio);const W=r.width,H=r.height;
-    x.clearRect(0,0,W,H);x.strokeStyle='#1d242d';x.lineWidth=1;for(let i=1;i<4;i++){x.beginPath();x.moveTo(0,H*i/4);x.lineTo(W,H*i/4);x.stroke();}
-    const s=series[c.key];if(s.length<2)return;x.beginPath();s.forEach((val,i)=>{const px=i/(240-1)*W,py=H-(val/max)*H;i?x.lineTo(px,py):x.moveTo(px,py);});x.strokeStyle=c.color;x.lineWidth=2;x.stroke();
-    x.lineTo((s.length-1)/(240-1)*W,H);x.lineTo(0,H);x.closePath();x.fillStyle=c.color+'22';x.fill();
-    const last=s[s.length-1];x.fillStyle=c.color;x.beginPath();x.arc((s.length-1)/(240-1)*W,H-(last/max)*H,3,0,7);x.fill();
+    el.width=r.width*devicePixelRatio;el.height=r.height*devicePixelRatio;const x=el.getContext('2d');x.scale(devicePixelRatio,devicePixelRatio);
+    const AX=44,TOP=12,W=r.width-AX-4,H=r.height-TOP-10,Y=v=>TOP+H-(v/max)*H;
+    x.clearRect(0,0,r.width,r.height);
+    x.font='600 15px "Fira Sans Condensed", sans-serif';x.textAlign='right';x.textBaseline='middle';
+    [0,max/2,max].forEach(t=>{x.strokeStyle=rule;x.lineWidth=1;x.beginPath();x.moveTo(AX,Y(t));x.lineTo(AX+W,Y(t));x.stroke();x.fillStyle=ink;x.fillText(String(Math.round(t)),AX-8,Y(t));});
+    const ref=chartRef(c);
+    if(ref&&ref.value<=max){x.strokeStyle=ink;x.setLineDash([6,4]);x.beginPath();x.moveTo(AX,Y(ref.value));x.lineTo(AX+W,Y(ref.value));x.stroke();x.setLineDash([]);x.fillText(ref.label+' '+ref.value+(c.unit||''),AX+W-4,Y(ref.value)-11);}
+    const s=series[c.key];if(s.length<2)return;const px=i=>AX+i/(240-1)*W;
+    x.beginPath();s.forEach((val,i)=>{i?x.lineTo(px(i),Y(val)):x.moveTo(px(i),Y(val));});x.strokeStyle=c.color;x.lineWidth=2;x.lineJoin='round';x.stroke();
+    x.lineTo(px(s.length-1),Y(0));x.lineTo(px(0),Y(0));x.closePath();x.fillStyle=c.color+'14';x.fill();
+    const last=s[s.length-1];x.fillStyle=c.color;x.beginPath();x.arc(px(s.length-1),Y(last),4,0,7);x.fill();
     const lbl=document.getElementById('v-'+c.key);if(lbl)lbl.textContent=chartFmt(c,last,tel);
   });
 }
 function renderProjector(){
   const g=G();const p=g.panic||0;const tier=ENGINE.tierOf(p,P().panic.tiers);const T=ENGINE.gameSec(g);const tel=P().telemetry(g);
   const segs=Array.from({length:20},(_,i)=>{const n=i+1;const cls=n<=p?('on '+(n>=19?'m':n>=15?'r':n>=10?'a':'')):'';return `<i class="${cls}"></i>`;}).join('');
-  const feed=liveFeed().slice(-18).reverse().map(e=>`<div class="${e.sev||'info'}"><span class="dim">${fmtT(e.t)}</span> ${esc(e.msg)}</div>`).join('');
-  const wall=S.wall.slice(-8).reverse().map(w=>`<div class="wallcard ${w.key?'key':''}"><div class="who"><span>${ROLES()[w.role]?.short||w.role} · ${w.artifactId}</span>${w.key?`<span class="k">${w.key}</span>`:''}</div>${esc(w.summary)}</div>`).join('')||`<div class="muted">Стена пуста. Улики появятся, когда игроки вынесут выводы.</div>`;
+  const feed=liveFeed().slice(-6).reverse().map(e=>`<div class="${e.sev||'info'}"><span class="muted">${fmtT(e.t)}</span> ${esc(e.msg)}</div>`).join('');
+  const wall=S.wall.slice(-6).reverse().map(w=>`<div class="wallcard ${w.key?'key':''}"><div class="who"><span>${ROLES()[w.role]?.short||w.role} · ${w.artifactId}</span>${w.key?`<span class="k">${w.key}</span>`:''}</div>${esc(w.summary)}</div>`).join('')||`<div class="muted" style="font-size:22px">Стена пуста. Улики появятся, когда игроки вынесут выводы.</div>`;
   const applied=(g.applied||[]).map(id=>`<span class="pill ${MITBY()[id]?.trap?'red':'green'}">${id}</span>`).join(' ');
+  const keysN=S.wall.filter(w=>w.key).length;
   let overlay='';
   if(g.call&&g.call.active){overlay=`<div class="overlay"><div class="callcard"><div class="eyebrow" style="color:#ffb3b5">📞 Входящий звонок</div><div class="who">${esc(g.call.caller)}</div><div class="cd" data-callcd>${fmtT(Math.max(0,(g.call.dur||180)-(T-g.call.startedAt)))}</div><div class="muted">до срыва · +1 паники каждые ${P().schedule.cioCall.panicEverySec} с без ответа</div></div></div>`;}
-  else if(g.status==='RESOLVED'||g.status==='FAILED'){overlay=`<div class="overlay end ${g.status==='FAILED'?'fail':''}"><div class="callcard"><div class="eyebrow">${g.status==='RESOLVED'?'Инцидент закрыт':'Инцидент не потушен'}</div><div class="who">${g.status==='RESOLVED'?'RESOLVED':'FAILED'}</div><div class="cd" style="color:${g.status==='RESOLVED'?'var(--green)':'var(--red)'}">${fmtRub(ENGINE.burned(g))}</div><div class="muted">${fmtT(g.endedSec||T)} · паника ${p} · улик ${S.wall.filter(w=>w.key).length} из ${keyTotal()} · действий вслепую ${S.props.filter(x=>x.status==='done'&&isBlind(x)).length}${g.mitigatedSec!=null?' · влияние остановлено на '+fmtT(g.mitigatedSec):''}</div></div></div>`;}
-  else if(g.status==='LOBBY'){overlay=`<div class="overlay"><div class="callcard" style="border-color:var(--line2);box-shadow:none;animation:none"><div class="eyebrow">Подключение</div><div class="who" style="font-size:32px">${esc(P().title)}</div>${lobbySel().mode==='training'?'<div style="margin-top:8px"><span class="pill violet">учебный режим</span></div>':''}<div class="mono" style="margin:12px 0;font-size:18px;word-break:break-all">${esc(store.mode==='http'?location.origin+'/#play':'на этом же ноутбуке: вкладка #play')}</div><div class="row" style="justify-content:center">${ROLE_ORDER().map(r=>`<span class="pill ${S.players[r]?.name?'green':''}">${ROLES()[r].short}${S.players[r]?.name?' · '+esc(S.players[r].name):''}</span>`).join('')}</div><div class="muted" style="margin-top:14px">Ведущий запустит инцидент с пульта</div></div></div>`;}
+  else if(g.status==='RESOLVED'||g.status==='FAILED'){const ok=g.status==='RESOLVED';overlay=`<div class="overlay end ${ok?'':'fail'}"><div class="callcard"><div class="who">${ok?'Инцидент закрыт':'Инцидент не потушили'}</div><div class="cd" style="color:${ok?'var(--green)':'var(--red)'}">${fmtRub(ENGINE.burned(g))}</div><div class="muted" style="font-size:20px">${fmtT(g.endedSec||T)} · паника ${p} · ключевых улик ${keysN} из ${keyTotal()} · действий вслепую ${S.props.filter(x=>x.status==='done'&&isBlind(x)).length}${g.mitigatedSec!=null?' · влияние остановлено на '+fmtT(g.mitigatedSec):''}</div></div></div>`;}
+  else if(g.status==='LOBBY'){overlay=`<div class="overlay"><div class="callcard" style="border-color:var(--line2);box-shadow:none;animation:none"><div class="eyebrow">Подключайтесь</div><div class="who" style="font-size:34px">${esc(P().title)}</div>${lobbySel().mode==='training'?'<div style="margin-top:8px"><span class="pill violet">учебный режим</span></div>':''}<div class="mono" style="margin:14px 0;font-size:24px;word-break:break-all">${esc(store.mode==='http'?location.origin+'/#play':'на этом же ноутбуке: вкладка #play')}</div><div class="row" style="justify-content:center">${ROLE_ORDER().map(r=>`<span class="pill ${S.players[r]?.name?'green':''}" style="font-size:16px">${ROLES()[r].short}${S.players[r]?.name?' · '+esc(S.players[r].name):''}</span>`).join('')}</div><div class="muted" style="margin-top:14px;font-size:18px">Ведущий запустит инцидент с пульта</div></div></div>`;}
   return `<div class="proj">
     <div class="top">
-      <div><div class="lbl">Инцидент · ${esc(P().title)}${g.mode==='training'?' · учебный':''}</div><div class="clock" data-clock>${fmtT(T)}</div></div>
-      <div><div class="lbl">Сожжено</div><div class="money" data-money>${fmtRub(ENGINE.burned(g))}</div><div class="lbl">${fmtRub(ENGINE.currentRate(g,P()))} / мин</div></div>
-      <div style="margin-left:auto;text-align:right"><div class="lbl">Статус</div><div style="font-family:var(--mono);font-size:28px;color:${g.status==='ACTIVE'?'var(--red)':g.status==='RESOLVED'?'var(--green)':'var(--amber)'}">${g.status}</div><div class="lbl">${esc(tel.label)}</div>${g.mitigatedSec!=null?`<div><span class="pill cyan">влияние остановлено: ${fmtT(g.mitigatedSec)}</span></div>`:''}${g.fired&&g.fired.win?'<div><span class="pill green">победа: ждём Resolved</span></div>':''}</div>
+      <div><div class="lbl">${esc(P().title)}${g.mode==='training'?' · учебный':''}</div><div class="clock" data-clock>${fmtT(T)}</div></div>
+      <div><div class="lbl">Сожжено · ${fmtRub(ENGINE.currentRate(g,P()))} в минуту</div><div class="money" data-money>${fmtRub(ENGINE.burned(g))}</div></div>
+      <div class="pmeter"><div class="row1"><span class="num" style="color:${p>=15?'var(--red)':p>=10?'var(--amber)':'var(--ink)'}">${p}</span><span class="tier">паника · ${tier.name}</span></div><div class="segs">${segs}</div><div class="sub">потери ×${tier.mult}${g.storm?' · шквал саппорта +20%':''}${tier.cost>1?' · запросы ×'+String(tier.cost).replace('.',','):''}${p>=10?' · решение за 60 с':''}</div></div>
+      <div style="margin-left:auto;text-align:right"><div style="font-family:var(--cond);font-size:34px;font-weight:700;color:var(--${stCls(g.status)})">${cap(ST[g.status]||g.status)}</div>${tel.label&&tel.label!=='Инцидент'?`<div class="lbl">${esc(tel.label)}</div>`:''}${g.mitigatedSec!=null?`<div style="margin-top:4px"><span class="pill cyan" style="font-size:16px">влияние остановлено: ${fmtT(g.mitigatedSec)}</span></div>`:''}${g.fired&&g.fired.win?'<div style="margin-top:4px"><span class="pill green" style="font-size:16px">условия победы выполнены</span></div>':''}</div>
       <button class="sm" id="armAudio" onclick="armAudio()">${audio.armed?'🔊 звук включён':'🔇 включить звук'}</button>
     </div>
     <div class="main">
       <div class="col">
-        <div class="eyebrow">Шкала паники</div>
-        <div class="panic"><div class="segs">${segs}</div><div class="info"><div class="num" style="color:${p>=15?'var(--red)':p>=10?'var(--amber)':p>=5?'#ffd58a':'var(--green)'}">${p}</div><div class="tier">${tier.name}</div><div class="muted">потери ×${tier.mult}${g.storm?' · шквал саппорта +20%':''}</div></div></div>
-        <div class="penalty">${tier.cost>1?'ЦЕНА ЗАПРОСОВ: ×'+tier.cost:'ШТРАФОВ НЕТ'}${p>=10?' · РЕШЕНИЕ ЗА 60 С':''}</div>
-        <div><div class="eyebrow">Применено</div><div class="row" style="margin-top:6px">${applied||'<span class="dim">пока ничего</span>'}</div><div class="muted" style="margin-top:6px;font-size:13px">${esc(tel.label)}</div></div>
+        ${CHARTS().map(c=>`<div class="chart"><div class="t"><span>${esc(c.title)}</span><span>${c.side?esc(c.side(tel)):''}</span></div><div class="v" id="v-${c.key}" style="color:${c.color}">—</div><canvas id="ch-${c.key}" role="img" aria-label="${esc(c.title)}"></canvas></div>`).join('')}
+        <div class="applied">Применено: ${applied||'пока ничего'}</div>
       </div>
       <div class="col">
-        ${CHARTS().map(c=>`<div class="chart"><div class="t"><span>${esc(c.title)}</span><span>${c.side?esc(c.side(tel)):''}</span></div><div class="v" id="v-${c.key}" style="color:${c.color}">—</div><canvas id="ch-${c.key}"></canvas></div>`).join('')}
-      </div>
-      <div class="col">
-        <div class="eyebrow">Стена улик · ${S.wall.filter(w=>w.key).length} / ${keyTotal()} ключевых</div>
+        <div class="eyebrow">Стена улик · ключевых ${keysN} из ${keyTotal()}</div>
         <div class="wall">${wall}</div>
         <div class="eyebrow">Лента</div>
         <div class="feed">${feed}</div>
@@ -480,7 +518,7 @@ function buildFeed(st,pack){
   wall.forEach(w=>out.push({t:w.t,msg:`${RO[w.role]?.short||w.role}: на стену «${w.summary}»`,sev:w.key?'success':'info'}));
   props.forEach(p=>{out.push({t:p.t,msg:`${RO[p.role]?.short} предлагает ${p.mitId}: ${MIT[p.mitId]?.title||''}${isBlind(p,pack)?' (вслепую)':''}`,sev:'warning'});if(p.goAt!=null)out.push({t:p.goAt,msg:`IC: Go на ${p.mitId}`,sev:'warning'});});
   statuses.forEach(s=>out.push({t:s.t,msg:`Статус-пейдж: «${s.text.slice(0,90)}»`,sev:'info'}));
-  hyps.forEach(h=>out.push({t:h.t,msg:`Гипотеза: ${h.text} [${h.status}]`,sev:'info'}));
+  hyps.forEach(h=>out.push({t:h.t,msg:`Гипотеза: ${h.text} (${HST[h.status]||h.status})`,sev:'info'}));
   return out.sort((a,b)=>a.t-b.t);
 }
 const liveFeed=()=>buildFeed(STATE,P());
@@ -500,50 +538,53 @@ function audioTick(){const g=G();if(!audio.armed)return;
 
 /* ---------- GM ---------- */
 function renderGM(){
-  const g=G();const T=ENGINE.gameSec(g);const tel=P().telemetry(g);
-  const inflight=ROLE_ORDER().map(r=>{const p=S.players[r];if(!p)return `<div class="dim">${ROLES()[r].short}: —</div>`;const f=p.inFlight&&Date.now()<p.inFlight.readyAt?`ждёт ${p.inFlight.id} <span data-cd="${p.inFlight.readyAt}"></span>`:'свободен';return `<div><b>${ROLES()[r].short}</b> ${esc(p.name||'')} · ${f}</div>`;}).join('');
-  const wall=S.wall.slice().reverse().map(w=>`<div class="wallcard ${w.key?'key':''}"><div class="who"><span>${fmtT(w.t)} · ${ROLES()[w.role]?.short} · ${w.artifactId}${ARTBY()[w.artifactId]?.key?` <span class="dim">(в артефакте ${ARTBY()[w.artifactId].key})</span>`:''}</span><span class="row" style="gap:4px"><select class="sm" style="width:auto;padding:2px 6px" onchange="markKey('${w.id}',this.value)"><option value="">не ключ</option>${KEYS().map(k=>`<option ${w.key===k?'selected':''}>${k}</option>`).join('')}</select></span></div>${esc(w.summary)}</div>`).join('')||'<div class="dim">пусто</div>';
-  const props=S.props.filter(p=>p.status!=='done'&&p.status!=='rejected').slice().reverse().map(p=>{const m=MITBY()[p.mitId];return `<div class="item ${p.status==='pending'?'pending':''}"><div class="head"><span><b>${p.mitId}</b> ${esc(m?.title||'')} <span class="pill ${p.status==='go'?'amber':''}">${p.status}</span> ${m?.trap?'<span class="pill red">ловушка</span>':''}${isBlind(p)?'<span class="pill red">вслепую</span>':(m?.reversible&&!(p.cards||[]).length?'<span class="pill cyan">обратимо</span>':'')}${p.reviewedBy?`<span class="pill green">ревью: ${ROLES()[p.reviewedBy]?.short}</span>`:(m?.review?'<span class="pill amber">без ревью → d10</span>':'')}</span><span class="cost">${fmtT(p.t)} · ${ROLES()[p.role]?.short}</span></div>
+  autoLoadArchives();
+  const g=G();const tel=P().telemetry(g);const live=g.status==='ACTIVE'||g.status==='PAUSED';
+  const inflight=ROLE_ORDER().map(r=>{const p=S.players[r];if(!p)return `<div class="muted">${ROLES()[r].short}: не подключён</div>`;const f=p.inFlight&&Date.now()<p.inFlight.readyAt?`ждёт ${p.inFlight.id} <span data-cd="${p.inFlight.readyAt}"></span>`:'свободен';return `<div><b>${ROLES()[r].short}</b> ${esc(p.name||'')} · ${f}</div>`;}).join('');
+  const wall=S.wall.slice().reverse().map(w=>`<div class="wallcard ${w.key?'key':''}"><div class="who"><span>${fmtT(w.t)} · ${ROLES()[w.role]?.short} · ${w.artifactId}${ARTBY()[w.artifactId]?.key?` <span class="muted">(в артефакте ${ARTBY()[w.artifactId].key})</span>`:''}</span><span class="row" style="gap:4px"><select class="sm" style="width:auto;padding:2px 6px" aria-label="ключевая улика" onchange="markKey('${w.id}',this.value)"><option value="">не ключ</option>${KEYS().map(k=>`<option ${w.key===k?'selected':''}>${k}</option>`).join('')}</select></span></div>${esc(w.summary)}</div>`).join('')||'<div class="muted">Пусто. Выводы игроков появятся здесь.</div>';
+  const props=S.props.filter(p=>p.status==='pending'||p.status==='go').slice().reverse().map(p=>{const m=MITBY()[p.mitId];return `<div class="item ${p.status==='pending'?'pending':''}"><div class="head"><span><b>${p.mitId}</b> ${esc(m?.title||'')} <span class="pill ${p.status==='go'?'amber':''}">${PST[p.status]||p.status}</span> ${m?.trap?'<span class="pill red">ловушка</span>':''}${isBlind(p)?'<span class="pill red">вслепую</span>':(m?.reversible&&!(p.cards||[]).length?'<span class="pill cyan">обратимо</span>':'')}${p.reviewedBy?`<span class="pill green">ревью: ${ROLES()[p.reviewedBy]?.short}</span>`:(m?.review?'<span class="pill amber">без ревью → d10</span>':'')}</span><span class="cost">${fmtT(p.t)} · ${ROLES()[p.role]?.short}</span></div>
     <div class="hint">${(p.cards||[]).map(c=>{const w=S.wall.find(x=>x.id===c);return w?'«'+esc(w.summary)+'»':''}).join(' · ')}</div>
-    <div class="row" style="margin-top:8px">${p.status==='pending'?`<button class="sm" onclick="gmGo('${p.id}')">Go за IC</button>`:''}${p.status==='go'?`<button class="sm primary" onclick="gmApply('${p.id}')">Выполнено немедленно</button>`:''}<button class="sm danger" onclick="updProp('${p.id}',{status:'rejected'})">Отклонить</button></div></div>`;}).join('')||'<div class="dim">нет предложений</div>';
-  const statuses=S.statuses.filter(s=>s.score==null).map(s=>`<div class="item"><div class="head"><b>Статус-пейдж · ${fmtT(s.t)}</b></div><div style="margin:6px 0">${esc(s.text)}</div><div class="hint">1) что не работает и что работает · 2) что делаем, без непроверенной причины · 3) время следующего апдейта</div><div class="row" style="margin-top:6px">${[0,1,2,3].map(n=>`<button class="sm ${n>=2?'ok':''}" onclick="rateStatus('${s.id}',${n},false)">${n} из 3</button>`).join('')}<button class="sm danger" onclick="rateStatus('${s.id}',0,true)">Обещан срок / ложная причина (+1)</button></div></div>`).join('');
-  const applied=(g.applied||[]).map(id=>`<span class="chip on" onclick="unapply('${id}')" title="снять">${id} ✕</span>`).join(' ')||'<span class="dim">ничего</span>';
-  return topbar(`<span class="muted">GM</span>`)+`<div class="wrap stack" style="gap:14px">
+    <div class="row" style="margin-top:8px">${p.status==='pending'?`<button class="sm" onclick="gmGo('${p.id}')">Go за IC</button>`:''}${p.status==='go'?`<button class="sm primary" onclick="gmApply('${p.id}')">Выполнить немедленно</button>`:''}<button class="sm danger" onclick="updProp('${p.id}',{status:'rejected'})">Отклонить</button></div></div>`;}).join('');
+  const statuses=S.statuses.filter(s=>s.score==null).map(s=>`<div class="item"><div class="head"><b>Статус-апдейт · ${fmtT(s.t)}</b></div><div style="margin:6px 0">${esc(s.text)}</div><div class="hint">1) что не работает и что работает · 2) что делаем, без непроверенной причины · 3) время следующего апдейта</div><div class="row" style="margin-top:6px">${[0,1,2,3].map(n=>`<button class="sm ${n>=2?'ok':''}" onclick="rateStatus('${s.id}',${n},false)">${n} из 3</button>`).join('')}<button class="sm danger" onclick="rateStatus('${s.id}',0,true)">Обещан срок / ложная причина (+1)</button></div></div>`).join('');
+  const call=g.call&&g.call.active?`<div class="item" style="border-color:var(--red)"><div class="head"><b>📞 Идёт звонок: ${esc(g.call.caller)}</b><span class="pill red">до срыва <span data-callcd></span></span></div><details style="margin-top:6px"><summary>Реплики CIO</summary><ul style="margin:6px 0 0;padding-left:18px">${(P().schedule.cioCall?P().schedule.cioCall.lines:[]).map(l=>`<li>${esc(l)}</li>`).join('')}</ul></details><div class="row" style="margin-top:8px"><button class="ok" onclick="endCall(true)">Отбит: −2 паники</button><button class="danger" onclick="endCall(false)">Провален</button></div></div>`:'';
+  const win=live&&g.fired&&g.fired.win?`<div class="item" style="border-color:var(--green)"><b>Условия победы выполнены.</b> Когда командир объявит закрытие вслух — нажмите «Закрыть инцидент».</div>`:'';
+  const attention=call+win+props+statuses;
+  const applied=(g.applied||[]).map(id=>`<span class="chip on" onclick="unapply('${id}')" title="снять эффект">${id} ✕</span>`).join(' ')||'<span class="muted">ничего</span>';
+  return topbar(`<span class="muted">пульт ведущего</span>`)+`<div class="wrap stack" style="gap:14px">
+  ${g.status==='LOBBY'?`<div class="card stack"><h2>Новая партия</h2>${packCards(true)}<div><button class="primary" onclick="startIncident(lobbySel().scenarioId,lobbySel().mode)">Запустить инцидент</button></div></div>`
+  :`<div class="card stack" style="border-color:${attention?'var(--amber)':'var(--line)'}"><h2>Требует действия</h2>${attention?`<div class="list">${attention}</div>`:'<div class="muted">Сейчас от вас ничего не ждут.</div>'}</div>`}
   <div class="gmgrid">
     <div class="card stack">
-      <div class="eyebrow">Управление</div>
+      <h2>Управление</h2>
       <div class="row">
-        ${g.status==='LOBBY'?`${packCards()}<button class="primary" onclick="startIncident(lobbySel().scenarioId,lobbySel().mode)">Start Incident</button>`:''}
         ${g.status==='ACTIVE'?`<button onclick="pauseIncident()">Пауза</button>`:''}
         ${g.status==='PAUSED'?`<button class="primary" onclick="resumeIncident()">Продолжить</button>`:''}
-        ${(g.status==='ACTIVE'||g.status==='PAUSED')?`${g.fired&&g.fired.win?'<span class="pill green">условия победы выполнены — ждём Resolved от IC</span>':''}<button class="ok" onclick="endGame('RESOLVED','IC объявил стабилизацию')">Resolved</button><button class="danger" onclick="endGame('FAILED','GM остановил')">Failed</button>`:''}
-        <button class="danger sm" onclick="resetAll()">Сбросить всё</button>
+        ${live?`<button class="ok" onclick="endGame('RESOLVED','командир объявил стабилизацию')">Закрыть инцидент</button><button class="danger" onclick="if(confirm('Остановить игру как проваленную?'))endGame('FAILED','ведущий остановил игру')">Провалить</button>`:''}
+        ${!live&&g.status!=='LOBBY'?`<span class="muted">Партия завершена: ${ST[g.status]}. Новая партия — «Сбросить всё» внизу.</span>`:''}
       </div>
       <div class="eyebrow">Паника</div>
-      <div class="row"><button onclick="setPanic(1,'ручная')">+1</button><button onclick="setPanic(2,'ловушка / вслепую')">+2</button><button class="ok" onclick="setPanic(-1,'ключевая улика')">−1</button><button class="ok" onclick="setPanic(-2,'статус / отбитый звонок')">−2</button><button class="ok" onclick="setPanic(-3,'стабилизация')">−3</button></div>
-      <div class="eyebrow">Звонок CIO <span class="dim">(план: ${fmtT(P().schedule.cioCall?P().schedule.cioCall.atSec:0)})</span></div>
-      <div class="row">${g.call&&g.call.active?`<span class="pill red">идёт · <span data-callcd></span></span><button class="ok" onclick="endCall(true)">Отбит: −2</button><button class="danger" onclick="endCall(false)">Провален</button>`:`<button onclick="startCall()" ${g.status!=='ACTIVE'?'disabled':''}>📞 Позвонить: ${esc(P().schedule.cioCall?P().schedule.cioCall.caller:'—')}</button>`}</div>
-      <details><summary>Реплики CIO</summary><ul style="margin:6px 0 0;padding-left:18px">${(P().schedule.cioCall?P().schedule.cioCall.lines:[]).map(l=>`<li>${esc(l)}</li>`).join('')}</ul></details>
-      <div class="eyebrow">Ивент мира <span class="dim">(план: ${((P().schedule.worldEvents||{}).rollsAt||[]).map(fmtT).join(', ')||'нет'})</span></div>
-      <div class="row"><button onclick="rollEvent()">🎲 d10 вручную</button>${g.lastEvent?`<span><b>${g.lastEvent.n}</b> · ${esc(g.lastEvent.t)} <span class="muted">— ${esc(g.lastEvent.d)}</span></span>`:''}</div>
+      <div class="row"><button onclick="setPanic(1,'ручная')" title="ручная +1">+1</button><button onclick="setPanic(2,'ловушка / вслепую')" title="ловушка или действие вслепую">+2</button><button class="ok" onclick="setPanic(-1,'ключевая улика')" title="ключевая улика">−1</button><button class="ok" onclick="setPanic(-2,'статус / отбитый звонок')" title="хороший статус или отбитый звонок">−2</button><button class="ok" onclick="setPanic(-3,'стабилизация')" title="стабилизация">−3</button></div>
+      <div class="eyebrow">Звонок CIO <span class="muted">· по плану в ${fmtT(P().schedule.cioCall?P().schedule.cioCall.atSec:0)}</span></div>
+      <div class="row">${g.call&&g.call.active?'<span class="muted">идёт — управление в «Требует действия»</span>':`<button onclick="startCall()" ${g.status!=='ACTIVE'?'disabled':''}>📞 Позвонить сейчас: ${esc(P().schedule.cioCall?P().schedule.cioCall.caller:'—')}</button>`}</div>
+      <div class="eyebrow">Ивент мира <span class="muted">· по плану ${((P().schedule.worldEvents||{}).rollsAt||[]).map(fmtT).join(', ')||'нет'}</span></div>
+      <div class="row"><button onclick="rollEvent()">🎲 Бросить d10</button>${g.lastEvent?`<span><b>${g.lastEvent.n}</b> · ${esc(g.lastEvent.t)} <span class="muted">— ${esc(g.lastEvent.d)}</span></span>`:''}</div>
       <div class="row"><label class="row" style="gap:6px"><input type="checkbox" style="width:auto" ${g.storm?'checked':''} onchange="gmWrite({storm:this.checked},this.checked?'Шквал саппорта: +20% к потерям':'Шквал саппорта снят','warning')"> шквал саппорта +20%</label></div>
       <div class="eyebrow">Эффекты на сервисе</div>
       <div class="chips">${applied}</div>
-      <div class="row"><select id="gmMit" style="width:auto">${ARTM().map(m=>`<option value="${m.id}">${m.id} · ${esc(m.title)}</option>`).join('')}</select><button class="sm" onclick="execMit(document.getElementById('gmMit').value,null)">Применить вручную</button></div>
+      <div class="row"><select id="gmMit" style="width:auto" aria-label="действие">${ARTM().map(m=>`<option value="${m.id}">${m.id} · ${esc(m.title)}</option>`).join('')}</select><button class="sm" onclick="execMit(document.getElementById('gmMit').value,null)">Применить вручную</button></div>
       ${(P().manualFlags||[]).map(f=>`<div class="row"><label class="row" style="gap:6px"><input type="checkbox" style="width:auto" ${g[f.key]?'checked':''} onchange="gmWrite({${f.key}:this.checked},this.checked?'${esc(f.on)}':'${esc(f.off||'')}','success')"> ${esc(f.label)}</label></div>`).join('')}
       <div class="hint">Сейчас: ошибки ${tel.err}% · RPS ${tel.rps} · потери ×${tel.mult} — ${esc(tel.label)}</div>
     </div>
     <div class="card stack">
-      <div class="eyebrow">Кто чего ждёт</div>${inflight}
-      <div class="eyebrow">Предложения действий</div><div class="list">${props}</div>
-      ${statuses?`<div class="eyebrow">Оценить статус-апдейт</div><div class="list">${statuses}</div>`:''}
-      <div class="eyebrow">Гипотезы IC</div><div class="list">${S.hyps.map(h=>`<div class="item"><span class="pill ${h.status==='confirmed'?'green':h.status==='refuted'?'red':''}">${h.status}</span> ${esc(h.text)}</div>`).join('')||'<div class="dim">пусто</div>'}</div>
+      <h2>Команда</h2>${inflight}
+      <div class="eyebrow">Гипотезы командира</div><div class="list">${S.hyps.map(h=>`<div class="item"><span class="pill ${h.status==='confirmed'?'green':h.status==='refuted'?'red':''}">${HST[h.status]||h.status}</span> ${esc(h.text)}</div>`).join('')||'<div class="muted">Гипотез пока нет.</div>'}</div>
     </div>
   </div>
-  <div class="card stack"><div class="eyebrow">Стена улик — отметьте ключевые, паника −1 за каждую</div>${wall}</div>
-  <div class="card stack"><div class="eyebrow">Шпаргалка · ${esc(P().title)}</div><pre style="margin-top:8px;white-space:pre-wrap">${esc(P().cheatsheet)}</pre></div>
-  <div class="card"><div class="row" style="justify-content:space-between"><div class="eyebrow">Таймлайн для постмортема</div><div class="row"><button class="sm primary" onclick="exportTimeline()">Скачать .md</button><button class="sm" onclick="copyTimeline()">Скопировать</button></div></div><div class="feed" style="max-height:320px;overflow:auto;margin-top:8px">${liveFeed().map(e=>`<div class="${e.sev||'info'}" style="white-space:normal"><span class="dim">${fmtT(e.t)}</span> ${esc(e.msg)}</div>`).join('')}</div></div>
-  <div class="card stack"><div class="row" style="justify-content:space-between"><div class="eyebrow">История игр</div><button class="sm" onclick="loadArchives()">Обновить список</button></div>${archiveListHtml()}</div>
+  <div class="card stack"><h2>Стена улик</h2><p class="hint" style="margin:0">Отметьте ключевые выводы: каждая ключевая улика — −1 паники.</p>${wall}</div>
+  <div class="card stack"><h2>Шпаргалка · ${esc(P().title)}</h2><pre style="margin-top:8px;white-space:pre-wrap">${esc(P().cheatsheet)}</pre></div>
+  <div class="card"><div class="row" style="justify-content:space-between"><h2>Таймлайн для постмортема</h2><div class="row"><button class="sm primary" onclick="exportTimeline()">Скачать .md</button><button class="sm" onclick="copyTimeline()">Скопировать</button></div></div><div class="feed" style="max-height:320px;overflow:auto;margin-top:8px">${liveFeed().map(e=>`<div class="${e.sev||'info'}" style="white-space:normal"><span class="muted">${fmtT(e.t)}</span> ${esc(e.msg)}</div>`).join('')}</div></div>
+  <div class="card stack"><div class="row" style="justify-content:space-between"><h2>История игр</h2><button class="sm" onclick="loadArchives()">Обновить</button></div>${archiveListHtml()}</div>
+  <div class="card stack" style="border-color:#7a2a2e"><h2>Новая партия</h2><p class="hint" style="margin:0">Стирает текущую игру, игроков и стену. Партия сохранится в «Историю игр».</p><div><button class="danger" onclick="resetAll()">Сбросить всё</button></div></div>
   </div>`;
 }
 async function startIncident(scenarioId,mode){
@@ -604,7 +645,7 @@ function buildReport(st,pack,atMs){
 
 Дата: ${new Date().toLocaleString('ru-RU')}
 Кейс: ${pack.title} v${pack.version}${g.mode==='training'?' · учебный режим':''}
-Итог: **${g.status}** на ${fmtT(g.endedSec??T)}
+Итог: **${ST[g.status]||g.status}** на ${fmtT(g.endedSec??T)}
 
 ## Цифры
 
@@ -622,7 +663,7 @@ function buildReport(st,pack,atMs){
 | Статус-апдейтов | ${statuses.length}, максимальный перерыв ${gaps} |
 | Звонок CIO | ${g.call?(g.call.result==='ok'?'отбит':g.call.result==='fail'?'провален':g.call.result==='timeout'?'сорван по таймауту':'шёл'):'не было'} |
 | Применено | ${(g.applied||[]).join(', ')||'—'} |
-${sec('Таймлайн',feed.map(e=>`- \`${fmtT(e.t)}\` ${e.msg}`))}${sec('Стена улик',wall.map(w=>`- \`${fmtT(w.t)}\` **${RO[w.role]?.short}** (${w.artifactId}${w.key?', '+w.key:''}): ${w.summary}`))}${sec('Гипотезы',hyps.map(h=>`- ${h.text} — ${h.status}`))}${sec('Действия',props.map(p=>`- \`${fmtT(p.t)}\` ${p.mitId} ${MIT[p.mitId]?.title||''} — ${RO[p.role]?.short}, ${p.status}${(p.cards||[]).length?', улик: '+p.cards.length:', вслепую'}${p.reviewedBy?', ревью: '+RO[p.reviewedBy]?.short:''}${p.goAt!=null?', Go '+fmtT(p.goAt):''}${p.doneAt!=null?', выполнено '+fmtT(p.doneAt):''}`))}${sec('Статус-апдейты',statuses.map(x=>`- \`${fmtT(x.t)}\` ${x.score!=null?x.score+' из 3'+(x.over?', обещан срок':''):'без оценки'}: ${x.text}`))}${sec('Журнал паники',(g.panicLog||[]).map(x=>`- \`${fmtT(x.t)}\` ${x.d>0?'+':''}${x.d} — ${x.why}`))}
+${sec('Таймлайн',feed.map(e=>`- \`${fmtT(e.t)}\` ${e.msg}`))}${sec('Стена улик',wall.map(w=>`- \`${fmtT(w.t)}\` **${RO[w.role]?.short}** (${w.artifactId}${w.key?', '+w.key:''}): ${w.summary}`))}${sec('Гипотезы',hyps.map(h=>`- ${h.text} — ${HST[h.status]||h.status}`))}${sec('Действия',props.map(p=>`- \`${fmtT(p.t)}\` ${p.mitId} ${MIT[p.mitId]?.title||''} — ${RO[p.role]?.short}, ${PST[p.status]||p.status}${(p.cards||[]).length?', улик: '+p.cards.length:', вслепую'}${p.reviewedBy?', ревью: '+RO[p.reviewedBy]?.short:''}${p.goAt!=null?', Go '+fmtT(p.goAt):''}${p.doneAt!=null?', выполнено '+fmtT(p.doneAt):''}`))}${sec('Статус-апдейты',statuses.map(x=>`- \`${fmtT(x.t)}\` ${x.score!=null?x.score+' из 3'+(x.over?', обещан срок':''):'без оценки'}: ${x.text}`))}${sec('Журнал паники',(g.panicLog||[]).map(x=>`- \`${fmtT(x.t)}\` ${x.d>0?'+':''}${x.d} — ${x.why}`))}
 ## Вопросы для разбора
 
 1. Когда в комнате впервые прозвучала настоящая причина? Что мешало раньше?
@@ -642,6 +683,8 @@ function exportTimeline(){
 function copyTimeline(){navigator.clipboard?.writeText(buildReport(STATE,P())).then(()=>toast('Скопировано в буфер'),()=>toast('Буфер недоступен'));}
 
 /* ---------- История игр (архив на сервере; в file:// скрыта) ---------- */
+let archivesRequested=false;
+function autoLoadArchives(){if(store.mode==='http'&&!archivesRequested){archivesRequested=true;setTimeout(loadArchives,0);}}
 async function loadArchives(){
   if(store.mode!=='http'){toast('Архив доступен только при запуске через server.js');return;}
   try{const r=await fetch('/archive');S.archives=await r.json();}catch(e){S.archives=[];toast('Архив недоступен');}
@@ -651,13 +694,13 @@ function archiveListHtml(){
   if(store.mode!=='http')return '<div class="hint">Архив появится при запуске через server.js.</div>';
   if(S.archiveView){
     const v=S.archiveView;const pack=window.SCENARIOS[v.state.game.scenarioId]||P();
-    return `<div class="item"><div class="head"><b>${esc(pack.title)} · ${v.state.game.status}</b><span class="cost">${new Date(v.summary.at).toLocaleString('ru-RU')}</span></div>
+    return `<div class="item"><div class="head"><b>${esc(pack.title)} · ${ST[v.state.game.status]||v.state.game.status}</b><span class="cost">${new Date(v.summary.at).toLocaleString('ru-RU')}</span></div>
     <div class="feed" style="max-height:260px;overflow:auto;margin-top:8px">${buildFeed(v.state,pack).map(e=>`<div class="${e.sev||'info'}" style="white-space:normal"><span class="dim">${fmtT(e.t)}</span> ${esc(e.msg)}</div>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="sm" onclick="S.archiveView=null;render()">Закрыть</button><button class="sm primary" onclick="downloadArchiveReport('${v.file}')">Постмортем .md</button><button class="sm ok" onclick="replayArchive('${v.state.game.scenarioId}','${v.state.game.mode||'standard'}')">Играть снова</button></div></div>`;
   }
-  if(!S.archives)return '<div class="hint">Список не загружен — нажмите «Обновить список».</div>';
+  if(!S.archives)return '<div class="hint">Загружаем…</div>';
   if(!S.archives.length)return '<div class="dim">Архив пуст: сыгранные игры появятся после сброса.</div>';
-  return `<div class="list">${S.archives.map(a=>`<div class="item"><div class="head"><span><b>${esc(a.scenarioId||'game')}</b> · ${a.status} · ${a.mode==='training'?'учебный':'стандартный'}</span><span class="cost">${fmtT(a.endedSec||0)} · ${fmtRub(a.burned||0)}</span></div>
+  return `<div class="list">${S.archives.map(a=>`<div class="item"><div class="head"><span><b>${esc((window.SCENARIOS[a.scenarioId]||{}).title||a.scenarioId||'игра')}</b> · ${ST[a.status]||a.status} · ${a.mode==='training'?'учебный':'стандартный'}</span><span class="cost">${fmtT(a.endedSec||0)} · ${fmtRub(a.burned||0)}</span></div>
     <div class="row" style="margin-top:6px"><button class="sm" onclick="viewArchive('${a.file}')">Таймлайн</button><button class="sm" onclick="downloadArchiveReport('${a.file}')">.md</button><button class="sm ok" onclick="replayArchive('${a.scenarioId}','${a.mode||'standard'}')">Играть снова</button></div></div>`).join('')}</div>`;
 }
 async function viewArchive(file){
@@ -729,7 +772,7 @@ function renderActions(r,me){
     <div class="hint">${mine.map(m=>`<b>${m.id}</b> — ${esc(m.hint||'')}`).join('<br>')}</div>
     <div class="eyebrow">Привязать улики со стены</div><div class="chips">${chips}</div>
     <button class="primary" onclick="propose(document.getElementById('mitSel').value,S.selCards||[]);S.selCards=[]">Отправить IC на «Go»</button></div>`;
-  const props=S.props.slice().reverse().map(p=>{const m=MITBY()[p.mitId];const canReview=r!=='commander'&&r!=='comms'&&p.role!==r&&p.status==='pending'&&m?.review&&!p.reviewedBy;return `<div class="item ${p.status==='pending'?'pending':p.status==='done'?'done':''}"><div class="head"><span><b>${p.mitId}</b> ${esc(m?.title||'')}</span><span class="pill ${p.status==='go'?'amber':p.status==='done'?'green':p.status==='rejected'?'red':''}">${p.status}</span></div><div class="hint">${fmtT(p.t)} · ${ROLES()[p.role]?.short} · ${(p.cards||[]).length?(p.cards.length+' улик'):isBlind(p)?'вслепую':'без улик, обратимо'}${p.reviewedBy?' · ревью: '+ROLES()[p.reviewedBy]?.short:''}${m?.review&&!p.reviewedBy&&p.status==='pending'?' · без ревью GM бросит d10':''}</div>
+  const props=S.props.slice().reverse().map(p=>{const m=MITBY()[p.mitId];const canReview=r!=='commander'&&r!=='comms'&&p.role!==r&&p.status==='pending'&&m?.review&&!p.reviewedBy;return `<div class="item ${p.status==='pending'?'pending':p.status==='done'?'done':''}"><div class="head"><span><b>${p.mitId}</b> ${esc(m?.title||'')}</span><span class="pill ${p.status==='go'?'amber':p.status==='done'?'green':p.status==='rejected'?'red':''}">${PST[p.status]||p.status}</span></div><div class="hint">${fmtT(p.t)} · ${ROLES()[p.role]?.short} · ${(p.cards||[]).length?(p.cards.length+' улик'):isBlind(p)?'вслепую':'без улик, обратимо'}${p.reviewedBy?' · ревью: '+ROLES()[p.reviewedBy]?.short:''}${m?.review&&!p.reviewedBy&&p.status==='pending'?' · без ревью GM бросит d10':''}</div>
     <div class="row" style="margin-top:6px">${canReview?`<button class="sm" onclick="updProp('${p.id}',{reviewedBy:'${r}'})">Ревью (+30 с)</button>`:''}${r==='commander'&&p.status==='pending'?`<button class="sm primary" onclick="icGo('${p.id}')" ${g.call&&g.call.active&&!S.players.comms?.shieldUsed?'disabled title="во время звонка Go недоступен"':''}>Go</button><button class="sm danger" onclick="updProp('${p.id}',{status:'rejected'})">Нет</button>`:''}${p.status==='go'?`<span class="hint">выполняется ${m?.cost+(p.reviewedBy?30:0)} с · GM применит эффект</span>`:''}</div></div>`;}).join('')||'<div class="dim">предложений нет</div>';
   return `<div class="stack" style="gap:14px">${form}<div><div class="eyebrow" style="margin-bottom:6px">Очередь действий</div><div class="list">${props}</div></div></div>`;
 }

@@ -333,12 +333,13 @@ Backoff с jitter лежит в бэклоге с марта. Могу выка�
   ],
 
   // Проектор: графики по полям telemetry(); side — подпись справа от заголовка.
+  // max фиксирован (шкала не прыгает), ref — линия-ориентир; у графика err порог победы рисуется сам.
   charts:[
-    {key:'err',title:'5xx · edge',max:100,color:'#ff4d4f',unit:' %',digits:1,idle:0.3,transient:60,jitter:4,
+    {key:'err',title:'5xx на edge',max:100,color:'#ff5a6a',unit:' %',digits:1,idle:0.3,transient:60,
      side:t=>'RPS '+new Intl.NumberFormat('ru-RU').format(t.rps)},
-    {key:'poolN',title:'Пул коннектов БД',max:t=>t.poolN>50?300:50,color:'#f5a524',idle:6,transient:20,jitter:2,
+    {key:'poolN',title:'Пул коннектов БД',max:120,color:'#f2a93b',idle:6,transient:20,ref:{value:50,label:'размер пула'},
      format:(v,t)=>Math.round(v)+' / '+(t.poolN>50?300:50),side:t=>'cl_waiting '+(t.poolN>=50?70:0)},
-    {key:'gor',title:'Горутины payment-proxy',max:300,color:'#4fc3f7',idle:210,transient:215,jitter:2,side:()=>'5xx 0 %'},
+    {key:'gor',title:'Горутины payment-proxy',max:300,color:'#5fb8f0',idle:210,transient:215,side:()=>'5xx 0 %'},
   ],
   // Ручные переключатели на пульте GM (поле game[key]).
   manualFlags:[{key:'cleared',label:'зависшие потоки очищены (рестарт после флага)',on:'Зависшие потоки очищены'}],

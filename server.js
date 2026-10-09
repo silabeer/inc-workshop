@@ -18,7 +18,7 @@ const ARCH=opts.archiveDir||path.join(DATA,'archive');
 // Игроки (players, wall, hypotheses, proposals, statuses) пишут без PIN.
 const GM_PIN=opts.gmPin!==undefined?opts.gmPin:(process.env.GM_PIN||'');
 const log=opts.log?(...a)=>console.log(new Date().toTimeString().slice(0,8),...a.filter(x=>x!==''&&x!=null)):()=>{};
-const STATIC={'/hall.html':path.join(ROOT,'hall.html'),'/engine.js':path.join(ROOT,'engine.js'),'/hall-engine.js':path.join(ROOT,'hall-engine.js')};
+const STATIC={'/hall.html':path.join(ROOT,'hall.html'),'/engine.js':path.join(ROOT,'engine.js'),'/hall-engine.js':path.join(ROOT,'hall-engine.js'),'/theme.css':path.join(ROOT,'theme.css'),'/fonts/fonts.css':path.join(ROOT,'fonts','fonts.css')};
 const EMPTY=()=>({rev:0,game:{status:'LOBBY',panic:0,applied:[],rateSegments:[],events:[]},players:{},wall:{},hypotheses:{},proposals:{},statuses:{}});
 let state=EMPTY();try{const raw=JSON.parse(fs.readFileSync(FILE,'utf8'));if(raw&&typeof raw.rev==='number')state=raw;}catch(e){}
 const clients=new Set();
@@ -78,8 +78,9 @@ const server=http.createServer((req,res)=>{
     try{list=fs.readdirSync(ARCH).filter(f=>f.endsWith('.json')).map(f=>{try{return Object.assign({file:f},JSON.parse(fs.readFileSync(path.join(ARCH,f),'utf8')).summary);}catch(e){return null;}}).filter(Boolean).sort((a,b)=>b.file.localeCompare(a.file));}catch(e){}
     res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});return res.end(JSON.stringify(list));}
   let m;
-  if(STATIC[u.pathname])return u.pathname.endsWith('.js')?serveJs(res,STATIC[u.pathname]):serveFile(res,STATIC[u.pathname],'text/html; charset=utf-8');
+  if(STATIC[u.pathname]){const f=STATIC[u.pathname];return f.endsWith('.js')?serveJs(res,f):serveFile(res,f,f.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8');}
   if((m=u.pathname.match(/^\/scenarios\/([\w.-]+\.js)$/)))return serveJs(res,path.join(ROOT,'scenarios',m[1]));
+  if((m=u.pathname.match(/^\/fonts\/([\w.-]+\.woff2)$/)))return serveFile(res,path.join(ROOT,'fonts',m[1]),'font/woff2');
   if((m=u.pathname.match(/^\/archive\/([\w.-]+\.json)$/))){
     const f=path.resolve(ARCH,m[1]);
     if(!f.startsWith(path.resolve(ARCH)+path.sep)||!fs.existsSync(f)){res.writeHead(404);return res.end();}

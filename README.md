@@ -72,10 +72,17 @@ docker run -d -p 8085:8085 -v inc-workshop-data:/app/data inc-workshop
 
 ```bash
 npm test                # = node --test; CI гоняет Node 18 и 22
+
+# UI-проверки в браузере (контраст, кегли для проектора, телефон, 720p) + скриншоты в test-ui/out/
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/playwright install chromium
+npm run test:ui
 ```
+
+Правила интерфейса — проектный скилл [`.claude/skills/inc-workshop-ui`](.claude/skills/inc-workshop-ui/SKILL.md).
 
 ```
 hall.html               холл-режим: UI, работает по file://
+theme.css, fonts/       общие токены оформления и локальные шрифты обоих режимов
 hall-engine.js          движок холла: валидация кейса, ходы, итог (чистые функции)
 war-room.html           war-room: проектор, пульт, терминалы игроков, исполнитель автопилота
 engine.js               движок war-room: экономика, паника, автопилот (чистые функции)
@@ -83,6 +90,7 @@ server.js               HTTP + SSE, хранение состояния, арх�
 scenarios/hall-*.js     холл-кейсы
 scenarios/*.js          war-room-паки
 test/                   node:test, без фреймворков
+test-ui/                Playwright-проверки интерфейса (Python), запуск npm run test:ui
 ```
 
 Правила для разработчиков и агентов — в [`CLAUDE.md`](CLAUDE.md).
