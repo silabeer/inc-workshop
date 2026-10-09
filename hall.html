@@ -683,6 +683,9 @@
     }
     if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
     var code = e.code, where = screen();
+    // Enter/пробел на сфокусированной кнопке или ссылке — родная активация именно этого элемента.
+    var t = e.target;
+    if ((code === 'Enter' || code === 'NumpadEnter' || code === 'Space') && t && (t.tagName === 'BUTTON' || t.tagName === 'A')) return;
     var helpOpen = !$('help').classList.contains('hidden');
     if (code === 'Escape') { toggleHelp(false); return; }
     if (e.key === '?' || (code === 'Slash' && e.shiftKey)) { toggleHelp(); return; }

@@ -61,3 +61,7 @@ test('hall.html: финал строится из HALL_ENGINE.summary, есть 
 test('hall.html: сценарии валидируются при загрузке', () => {
   assert.ok(html.includes('E.validate('), 'битый кейс должен отсекаться в лобби');
 });
+
+test('hall.html: Enter на сфокусированной кнопке не перехватывается глобальным обработчиком', () => {
+  assert.ok(/t\.tagName === 'BUTTON' \|\| t\.tagName === 'A'/.test(html), 'нужна защита родной активации кнопок');
+});
