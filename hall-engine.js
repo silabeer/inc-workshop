@@ -70,6 +70,11 @@
       for (const e of (diag.edges || [])) {
         if (!dIds.has(e.from) || !dIds.has(e.to)) errs.push(`диаграмма: ребро ${e.from} → ${e.to} ссылается на несуществующий узел`);
       }
+      for (const id of ids) {
+        for (const f of (nodes[id].focus || [])) {
+          if (!dIds.has(f)) errs.push(`узел ${id}: focus → несуществующий компонент диаграммы ${f}`);
+        }
+      }
     }
     return errs;
   }

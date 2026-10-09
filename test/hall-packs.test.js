@@ -76,3 +76,35 @@ test('cert: c4 не утверждает, что фикс уже ставитс�
   assert.ok(!/ставится/i.test(p.nodes.c4.text), 'c4 рисует фикс в работе даже после отказа от действий');
   assert.ok(/фикс в итоге встал/i.test(p.nodes.c7.text), 'c7 должен признавать, что фикс применён');
 });
+
+test('hall-паки: экран зала не подсказывает ответ — roleTask не повторяет лучший вариант, подсказки ведущему в facilitator', () => {
+  for (const p of PACKS) {
+    for (const n of Object.values(p.nodes)) {
+      if (n.end) continue;
+      assert.ok(n.facilitator && n.facilitator.trim(), `${p.id}/${n.id}: нет facilitator (заметки ведущего)`);
+      const top = Math.max(...n.choices.map(c => c.score));
+      const best = n.choices.find(c => c.score === top);
+      // ключевые слова лучшего варианта (длиннее 6 букв) не должны встречаться в roleTask
+      const words = best.label.toLowerCase().match(/[a-zа-яё_-]{7,}/g) || [];
+      const leaked = words.filter(w => n.roleTask.toLowerCase().includes(w));
+      assert.deepEqual(leaked, [], `${p.id}/${n.id}: roleTask подсказывает ответ (${leaked.join(', ')})`);
+    }
+  }
+});
+
+test('hall-паки: откат релиза — законная обратимая мера, не ловушка', () => {
+  for (const p of PACKS) {
+    for (const n of Object.values(p.nodes)) {
+      for (const c of (n.choices || [])) {
+        if (/^откатить/i.test(c.label)) assert.ok(!c.trap && c.score >= 1, `${p.id}/${c.id}: откат помечен ловушкой`);
+      }
+    }
+  }
+});
+
+test('hall-паки: в каждом кейсе есть шаг с blameless-разбором (вариант с поиском виноватых — ловушка)', () => {
+  for (const p of PACKS) {
+    const blame = Object.values(p.nodes).flatMap(n => n.choices || []).filter(c => /винов/i.test(c.label) && !/без поиска/i.test(c.label));
+    assert.ok(blame.length >= 1 && blame.every(c => c.trap && c.score < 0), `${p.id}: нет blameless-ловушки`);
+  }
+});

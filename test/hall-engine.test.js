@@ -277,3 +277,13 @@ test('stepsLeft: число решений до конца по самому д�
   assert.equal(HALL_ENGINE.stepsLeft(scn, 'n2'), 1);
   assert.equal(HALL_ENGINE.stepsLeft(scn, 'nEnd'), 0);
 });
+
+test('validate: focus узла ссылается на компоненты диаграммы', () => {
+  const ok = makeFix();
+  ok.nodes.n1.focus = ['edge', 'db'];
+  assert.deepEqual(HALL_ENGINE.validate(ok), []);
+  const bad = makeFix();
+  bad.nodes.n1.focus = ['nope'];
+  const errs = HALL_ENGINE.validate(bad);
+  assert.ok(errs.some(e => /focus/.test(e) && /nope/.test(e)), `got: ${errs}`);
+});
