@@ -1,6 +1,6 @@
 """UI-проверки обоих режимов в настоящем браузере (Playwright, headless Chromium).
 
-Запуск: npm run test:ui  (поднимает сервер на :8099 с временным DATA_DIR).
+Запуск: npm run test:ui  (поднимает свой сервер на свободном порту с временным DATA_DIR).
 Скриншоты всех экранов складываются в test-ui/out/ — их стоит просмотреть глазами:
 проверки ловят регрессии, но не заменяют взгляд.
 
@@ -19,7 +19,7 @@ import sys
 
 from playwright.sync_api import sync_playwright
 
-BASE = os.environ.get('UI_BASE', 'http://localhost:8099')
+BASE = os.environ['UI_BASE']  # задаёт run.js: свой сервер на свободном порту
 OUT = os.path.join(os.path.dirname(__file__), 'out')
 os.makedirs(OUT, exist_ok=True)
 failures = []
