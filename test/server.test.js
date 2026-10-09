@@ -332,8 +332,8 @@ test('опечатки зала в коде входа не запирают в�
   assert.equal((await s.get('/api/auth', { 'x-gm-pin': '4821' })).status, 200, 'пульт при этом работает');
 });
 
-test('голоса зала: не больше 50 с одного адреса за шаг', async (t) => {
-  const s = await start(t);
+test('голоса зала: лимит с одного адреса за шаг (по умолчанию 250, настраивается)', async (t) => {
+  const s = await start(t, { audiencePerIp: 50 });
   await cmd(s, { type: 'start' }); await cmd(s, { type: 'voting' });
   for (let i = 0; i < 50; i++) assert.equal((await s.post('/api/audience', { token: 'z' + i, option: 'A' })).status, 200);
   assert.equal((await s.post('/api/audience', { token: 'z-лишний', option: 'A' })).status, 429);
@@ -468,4 +468,165 @@ test('запрос с чужого сайта отклоняется (Origin)', 
   const s = await start(t);
   assert.equal((await s.post('/api/cmd', { type: 'start' }, { origin: 'https://evil.example' })).status, 403);
   assert.equal((await s.post('/api/cmd', { type: 'start' }, { origin: `http://127.0.0.1:${s.port}` })).status, 200);
+});
+
+test('битая cookie не роняет сервер: поток и выдача токена работают, значение пропускается', async (t) => {
+  const s = await start(t);
+  const ev = await fetch(`${BASE}:${s.port}/events?view=play`, { headers: { cookie: 'incw_dev=%E0; incw_gm=%' } });
+  assert.equal(ev.status, 200);
+  await ev.body.cancel();
+  const d = await s.post('/api/device', {}, { cookie: 'incw_dev=%E0' });
+  assert.equal(d.status, 200);
+  assert.equal((await s.post('/api/claim', { role: 'scout' }, { cookie: 'incw_dev=%E0' })).status, 409, 'без токена роль не выдаётся');
+  assert.equal((await s.get('/healthz')).status, 200, 'сервер жив');
+});
+
+test('сбой записи архива: игра идёт, ведущий видит предупреждение, комната без архива не удаляется', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-srv-'));
+  fs.writeFileSync(path.join(dir, 'archive'), 'не каталог'); // mkdir архива упадёт
+  const s = await start(t, { dir, archiveDir: path.join(dir, 'archive') });
+  await s.post('/api/rooms', { action: 'create', id: 'stol-2' });
+  const room = c => s.post('/api/cmd?room=stol-2', c);
+  for (const c of [{ type: 'start' }, { type: 'voting' }, { type: 'reveal', option: 'A' }, { type: 'next' }, { type: 'voting' }, { type: 'reveal', option: 'Y' }, { type: 'next' }]) {
+    assert.equal((await room(c)).status, 200, c.type);
+  }
+  assert.equal((await firstEvent(s.port, 'room=stol-2&view=screen')).view.phase, 'end', 'итоги разосланы, несмотря на сбой архива');
+  const gm = (await firstEvent(s.port, 'room=stol-2&view=gm')).view;
+  assert.ok(gm.storage.archive && gm.storage.archive.message, 'пульт знает о сбое архива');
+  const del = await s.post('/api/rooms', { action: 'delete', id: 'stol-2' });
+  assert.equal(del.status, 503);
+  assert.match(del.body.error, /архив/);
+  assert.equal((await firstEvent(s.port, 'room=stol-2&view=screen')).status, 200, 'комната на месте');
+  assert.equal((await room({ type: 'reset' })).status, 200, 'новая партия начинается и без архива');
+  assert.equal((await s.get('/readyz')).status, 200, 'состояние пишется — сервер готов');
+});
+
+test('сбой сохранения состояния: /readyz отвечает 503, пульт видит ошибку; после починки — снова 200', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-srv-'));
+  const s = await start(t, { dir });
+  assert.equal((await s.get('/readyz')).status, 200);
+  fs.mkdirSync(path.join(dir, 'state.json.tmp')); // временный файл не создаётся
+  await cmd(s, { type: 'start' });
+  const r = await s.get('/readyz');
+  assert.equal(r.status, 503);
+  assert.equal(r.body.ready, false);
+  assert.ok(r.body.storage.persist.message);
+  assert.ok((await firstEvent(s.port, 'view=gm')).view.storage.persist, 'пульт знает');
+  assert.equal((await s.get('/healthz')).status, 200, 'живость не зависит от диска');
+  fs.rmdirSync(path.join(dir, 'state.json.tmp'));
+  await cmd(s, { type: 'discussion' });
+  assert.equal((await s.get('/readyz')).status, 200);
+});
+
+test('битый state.json откладывается рядом, сервер стартует с чистого листа', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-srv-'));
+  fs.writeFileSync(path.join(dir, 'state.json'), '{"rooms": {обрыв');
+  const errs = [];
+  const orig = console.error; console.error = (...a) => errs.push(a.join(' '));
+  let s;
+  try { s = await start(t, { dir }); } finally { console.error = orig; }
+  assert.equal((await firstEvent(s.port, 'view=screen')).view.phase, 'lobby');
+  assert.ok(fs.readdirSync(dir).some(f => f.startsWith('state.json.corrupt-')), 'битый файл сохранён для разбора');
+  assert.ok(errs.some(e => /не читается/.test(e)));
+});
+
+test('выход с пульта закрывает уже открытый поток ведущего', async (t) => {
+  const s = await start(t, { gmPin: '4821' });
+  const a = await fetch(`${BASE}:${s.port}/api/auth`, { headers: { 'x-gm-pin': '4821' } });
+  const cookie = a.headers.get('set-cookie').split(';')[0];
+  const ev = await fetch(`${BASE}:${s.port}/events?view=gm`, { headers: { cookie } });
+  assert.equal(ev.status, 200);
+  const reader = ev.body.getReader();
+  await reader.read(); // первое представление
+  await s.post('/api/logout', {}, { cookie });
+  let done = false;
+  const deadline = Date.now() + 2000;
+  while (!done && Date.now() < deadline) {
+    try { done = (await reader.read()).done; } catch (e) { done = true; }
+  }
+  assert.ok(done, 'поток закрыт сервером');
+});
+
+test('доверие прокси: X-Forwarded-For от адреса не из списка игнорируется', async (t) => {
+  const s = await start(t, { gmPin: '4821', trustProxy: '10.1.1.1' });
+  for (let i = 0; i < 10; i++) await s.get('/api/auth', { 'x-gm-pin': 'x', 'x-forwarded-for': `10.0.0.${i}` });
+  assert.equal((await s.get('/api/auth', { 'x-gm-pin': '4821', 'x-forwarded-for': '8.8.8.8' })).status, 429, 'подменой заголовка блокировку не обойти');
+});
+
+test('частота команд с адреса ограничена; повтор без изменений не пишет состояние', async (t) => {
+  const s = await start(t);
+  assert.equal((await s.post('/api/claim', { role: 'scout', token: 'tok-1' })).status, 200);
+  const file = path.join(s.dir, 'state.json');
+  const before = fs.statSync(file).mtimeMs;
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal((await s.post('/api/claim', { role: 'scout', token: 'tok-1' })).status, 200);
+  assert.equal(fs.statSync(file).mtimeMs, before, 'повторный захват своей роли не трогает диск');
+  const codes = await Promise.all(Array.from({ length: 30 }, () => s.post('/api/claim', { role: 'scout', token: 'tok-1' }).then(r => r.status)));
+  assert.ok(codes.includes(429), 'поток команд упирается в лимит');
+});
+
+test('/readyz: готов при исправном диске', async (t) => {
+  const s = await start(t);
+  const r = await s.get('/readyz');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { ready: true, closing: false, storage: { persist: null, archive: null } });
+});
+
+test('остановка дожидается начатого запроса и отвечает на него', async (t) => {
+  const s = await start(t);
+  const http = require('http');
+  const body = JSON.stringify({ type: 'team', team: 'Остановка' });
+  const reply = new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port: s.port, path: '/api/cmd', method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } },
+      res => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+    req.on('error', reject);
+    req.write(body.slice(0, 5)); // запрос начат, тело ещё идёт
+    setTimeout(() => { s.srv.close(); setTimeout(() => req.end(body.slice(5)), 100); }, 50);
+  });
+  assert.equal(await reply, 200);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(s.dir, 'state.json'), 'utf8')).rooms.main.session.team, 'Остановка', 'состояние записано');
+});
+
+test('структурно битая комната в state.json не роняет старт: она начинается заново, остальные восстанавливаются', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-srv-'));
+  const E = require('../workshop-engine.js');
+  const good = E.createSession(MINI, { team: 'Целая' });
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ version: 3, rooms: {
+    main: { scenarioId: 'mini', session: good },
+    'stol-2': { scenarioId: 'mini', session: { stepIndex: 0, journal: {}, seats: 'мусор', team: 7 } },
+  } }));
+  const errs = [];
+  const orig = console.error; console.error = (...a) => errs.push(a.join(' '));
+  let s;
+  try { s = await start(t, { dir }); } finally { console.error = orig; }
+  assert.equal((await firstEvent(s.port, 'view=screen')).view.team, 'Целая');
+  assert.equal((await firstEvent(s.port, 'room=stol-2&view=screen')).view.phase, 'lobby');
+  assert.ok(errs.some(e => /stol-2/.test(e)));
+});
+
+test('каталог данных недоступен с самого старта — /readyz сразу 503', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-srv-'));
+  fs.mkdirSync(path.join(dir, 'state.json.tmp'));
+  const orig = console.error; console.error = () => {};
+  let s;
+  try { s = await start(t, { dir }); } finally { console.error = orig; }
+  assert.equal((await s.get('/readyz')).status, 503);
+});
+
+test('лимит команд — на устройство: соседи за одним адресом друг другу не мешают', async (t) => {
+  const s = await start(t);
+  const burst = token => Promise.all(Array.from({ length: 20 }, () => s.post('/api/claim', { role: 'any' }, { cookie: 'incw_dev=' + token }).then(r => r.status)));
+  const [a, b] = await Promise.all([burst('dev-a'), burst('dev-b')]);
+  assert.ok(a.every(x => x === 200) && b.every(x => x === 200), `${a} / ${b}`);
+  const more = await Promise.all(Array.from({ length: 5 }, () => s.post('/api/claim', { role: 'any' }, { cookie: 'incw_dev=dev-a' }).then(r => r.status)));
+  assert.ok(more.includes(429), 'устройство упирается в свою квоту');
+});
+
+test('голос зала, пришедший перед остановкой, сохраняется', async (t) => {
+  const s = await start(t);
+  await cmd(s, { type: 'start' }); await cmd(s, { type: 'voting' });
+  assert.equal((await s.post('/api/audience', { token: 'zritel-1', option: 'A' })).status, 200);
+  await new Promise(res => s.srv.close(res));
+  const saved = JSON.parse(fs.readFileSync(path.join(s.dir, 'state.json'), 'utf8'));
+  assert.equal(saved.rooms.main.session.audience['zritel-1'], 'A');
 });

@@ -11,5 +11,7 @@ USER node
 ENV PORT=8085 HOST=0.0.0.0 DATA_DIR=/app/data
 EXPOSE 8085
 VOLUME ["/app/data"]
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1:${PORT}/healthz || exit 1
+# Готовность (/readyz): процесс отвечает и состояние пишется на диск. Протокол — как у сервера: с TLS_CERT это HTTPS
+# (сертификат выписан на внешнее имя, поэтому проверка его не сверяет — ходим на свой же 127.0.0.1).
+HEALTHCHECK --interval=30s --timeout=3s CMD node -e "const t=!!process.env.TLS_CERT;require(t?'https':'http').get({host:'127.0.0.1',port:process.env.PORT,path:'/readyz',rejectUnauthorized:false},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 CMD ["node", "server.js"]

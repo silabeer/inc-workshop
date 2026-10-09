@@ -249,7 +249,16 @@
     // Не перерисовываем, пока ведущий печатает название команды: иначе ввод собьётся.
     const a = document.activeElement;
     if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && a.type !== 'checkbox' && a.value !== a.defaultValue && document.getElementById('gm').contains(a)) { pending = v; last = v; return; }
-    mount('gmBody', bar(v), body);
+    mount('gmBody', bar(v), storageWarn(v.storage), body);
+  }
+
+  // Сбой диска на сервере: игра продолжается, но без сохранения рестарт её потеряет, а партия не попадёт в аналитику.
+  function storageWarn(st) {
+    if (!st || (!st.persist && !st.archive)) return null;
+    return h('p', { class: 'note-warn g-storage', role: 'alert' },
+      st.persist ? 'Состояние не сохраняется на диск сервера: после перезапуска партия пропадёт. ' : '',
+      st.archive ? 'Архив партии не записан: её не будет в аналитике. ' : '',
+      'Проверьте место на диске и права на каталог данных (код ' + (st.persist || st.archive).code + ', подробности — в логе сервера).');
   }
 
   // Отложенная перерисовка, если обновление пришло, пока ведущий печатал.

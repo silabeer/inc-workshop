@@ -68,7 +68,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 # Проект: inc-workshop
 
-Тренажёр инцидент-респонса для живых воркшопов. Ноль зависимостей, vanilla JS, Node ≥ 18.
+Тренажёр инцидент-респонса для живых воркшопов. Ноль зависимостей, vanilla JS, Node ≥ 20.
 
 - Тесты: `npm test` (= `node --test`). Всё должно быть зелёным перед коммитом.
 - Правки интерфейса: сначала скилл `inc-workshop-ui`, после — `npm run test:ui` и просмотр скриншотов в `test-ui/out/`.

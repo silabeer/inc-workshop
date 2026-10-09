@@ -16,6 +16,7 @@
   - ничья (с голосом Командира и без), бумажный режим (голоса вписывает ведущий), голос зала;
   - комнаты, код входа, звук, аналитика по архиву;
   - вход ведущего по PIN: сессия в cookie, PIN и токены не попадают в адреса запросов и в localStorage;
+  - сбой диска сервера: пульт показывает предупреждение;
   - в консоли нет ошибок.
 """
 import os
@@ -28,6 +29,7 @@ from PIL import Image
 
 BASE = os.environ['UI_BASE']  # задаёт run.js: свой сервер на свободном порту
 BASE_PIN, PIN = os.environ['UI_BASE_PIN'], os.environ['UI_PIN']  # второй сервер — с PIN ведущего
+BASE_BROKEN = os.environ['UI_BASE_BROKEN']  # третий — диск не принимает state.json
 OUT = os.path.join(os.path.dirname(__file__), 'out')
 os.makedirs(OUT, exist_ok=True)
 failures = []
@@ -403,6 +405,17 @@ def run():
         check(not leaks, f'секреты в адресах запросов: {leaks[:3]}')
         g2.get_by_role('link', name='Выйти с пульта').click()
         g2.wait_for_selector('.g-pin input')
+
+        # ---------- Сбой диска: предупреждение ведущему ----------
+        print('Сбой диска')
+        g3 = new_page(1280, 900)
+        g3.goto(BASE_BROKEN + '/#gm')
+        g3.wait_for_selector('.g-cases')
+        g3.wait_for_selector('.g-storage', timeout=5000)  # запись при старте уже не удалась
+        check('не сохраняется' in g3.locator('.g-storage').inner_text(), 'текст предупреждения о сохранении')
+        shot(g3, 'gm-storage-error')
+        contrast(g3, 'пульт/сбой диска')
+        english(g3, 'пульт/сбой диска')
 
         check(not errors, f'ошибки в консоли: {errors[:5]}')
         browser.close()
