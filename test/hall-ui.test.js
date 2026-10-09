@@ -77,3 +77,7 @@ test('hall.html: подсказки ведущему (say, facilitator) не в�
 test('hall.html: экран ведущего принимает сообщения только от своего окна', () => {
   assert.ok(html.includes('e.source === presenterWin') && html.includes('e.source === window.opener'), 'нет проверки e.source в postMessage');
 });
+
+test('hall.html: в лобби экран ведущего показывает текущий выбор, а не прошлую игру', () => {
+  assert.ok(html.includes("where !== 'lobby'") && html.includes("d.screen === 'lobby' ? d.selected"), 'снимок лобби не должен нести scnId прошлой игры');
+});

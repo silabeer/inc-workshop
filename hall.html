@@ -738,7 +738,8 @@
     var where = screen();
     var outcome = where === 'game' && !$('outcomeView').classList.contains('hidden');
     var snap = { type: 'hall:sync', screen: outcome ? 'outcome' : (where === 'game' ? 'play' : where), selected: selected };
-    if (scn && state) {
+    // В лобби от прошлой игры остаются scn/state — их не шлём, иначе ведущий увидит старый кейс.
+    if (scn && state && where !== 'lobby') {
       snap.scnId = scn.id; snap.team = state.team; snap.score = state.score; snap.tension = state.tension;
       snap.nodeId = outcome ? history[history.length - 1].nodeId : state.nodeId;
       snap.pickedId = outcome && pending ? pending.choice.id : null;
@@ -779,7 +780,7 @@
 
   function renderPresenter(d) {
     var body = $('pBody'); body.innerHTML = '';
-    var pack = byId(d.scnId || d.selected);
+    var pack = byId(d.screen === 'lobby' ? d.selected : d.scnId);
     if (d.screen === 'lobby') {
       text('pStatus', 'Лобби');
       if (pack) body.appendChild(presenterPanel(pack.title, pack.brief));

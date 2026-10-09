@@ -201,10 +201,13 @@ const store={
       try{await attempt();}
       catch(e){
         if(e&&e.code===401){
+          // Сервер отверг запись и ничего не разослал, а gmWrite/автопилот уже показали
+          // оптимистичный результат — возвращаем последнее подтверждённое состояние.
+          const rollback=()=>this.apply(STATE);
           // Автопилот не дёргает prompt каждые полсекунды: показываем кнопку «Ввести PIN».
-          if(opts.auto||!askGmPin()){S.needPin=true;render();throw e;}
+          if(opts.auto||!askGmPin()){S.needPin=true;rollback();throw e;}
           S.needPin=false;
-          try{await attempt();}catch(e2){if(e2&&e2.code===401){forgetGmPin();toast('Неверный PIN ведущего');}throw e2;}
+          try{await attempt();}catch(e2){if(e2&&e2.code===401){forgetGmPin();toast('Неверный PIN ведущего');S.needPin=true;rollback();}throw e2;}
           return;
         }
         if(e&&e.code===409){
