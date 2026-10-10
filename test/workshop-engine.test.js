@@ -313,3 +313,49 @@ test('заметки ведущего: по шагам, переживают о�
   s = E.apply(PACK, s, { type: 'note', stepId: 's1', text: '  ' }, 8);
   assert.equal(s.notes.s1, undefined, 'пустая заметка удаляет');
 });
+
+test('reflowData: колонка «label — значение» переносится по колонке значения', () => {
+  const out = E.reflowData('  ошибки         100% — TLS handshake failure (все новые подключения приложения)');
+  assert.deepEqual(out.split('\n'), [
+    '  ошибки         100% — TLS handshake',
+    '                 failure (все новые',
+    '                 подключения',
+    '                 приложения)',
+  ]);
+});
+
+test('reflowData: обычный текст переносится с отступом исходной строки', () => {
+  const out = E.reflowData('Ставка потерь при полной остановке уведомлений — 60 000 ₽/мин');
+  assert.deepEqual(out.split('\n'), [
+    'Ставка потерь при полной остановке',
+    'уведомлений — 60 000 ₽/мин',
+  ]);
+});
+
+test('reflowData: короткие строки и пустые не трогаются', () => {
+  assert.equal(E.reflowData('короткая строка'), 'короткая строка');
+  assert.equal(E.reflowData('a\n\nb'), 'a\n\nb');
+});
+
+test('reflowData: слово после широкого пробельного захода продолжает по своей колонке', () => {
+  // «ephemeral-storage.» стоит дальше 16-й колонки, но до неё строка рвётся раньше —
+  // продолжение идёт с отступом исходной строки (пробелы до слова одиночные).
+  const out = E.reflowData('  Message: The node was low on resource: ephemeral-storage.');
+  assert.deepEqual(out.split('\n'), [
+    '  Message: The node was low on',
+    '  resource: ephemeral-storage.',
+  ]);
+});
+
+test('view(play): приватка приходит переформатированной, пак и пульт — нет', () => {
+  const long = 'x'.repeat(50) + ' и ещё достаточно длинный хвост строки для переноса';
+  const p = fresh();
+  p.steps[0].private.scout.data = 'колонка        ' + long;
+  const s = run(E.apply(p, E.createSession(p), { type: 'claim', role: 'scout', token: 'tok' }, 1), { type: 'start' });
+  const phone = E.view(p, s, 'play', { token: 'tok', now: 1 });
+  // ≤ 45: уложенные строки; одиночный неразрывный токен (xxx… 50 шт.) может выступать — его режет word-break
+  assert.ok(phone.private.data.split('\n').every(l => l.length <= 45 || /^x+$/.test(l.trim())), 'строки телефона уложены');
+  assert.equal(p.steps[0].private.scout.data, 'колонка        ' + long, 'пак не меняется');
+  const gm = E.view(p, s, 'gm', { now: 1 });
+  assert.equal(gm.step.private.scout.data, 'колонка        ' + long, 'пульт видит оригинал');
+});

@@ -415,6 +415,49 @@
     return Object.assign(s, { rootCause: pack.end.rootCause, debriefQuestions: pack.end.debriefQuestions });
   }
 
+  /* ---------- Узкая раскладка приватки для телефона ---------- */
+
+  // Телефон вмещает ~39 моноширинных символов (390 px, .86rem), а строки в паках рассчитаны
+  // на пульт и карточки (до ~78). Переносим длинные строки так:
+  //  — «label␣␣значение» (узкий label, разделитель ≥ 2 пробела) → продолжение по колонке значения,
+  //    если та не глубже 28 (глубже — колонку на телефоне не спасти, переносим как обычный текст);
+  //  — иначе слово, стоявшее в исходнике после широкого пробельного захода, продолжает по своей колонке (до 24);
+  //  — обычный текст — по словам с отступом исходной строки.
+  // Неразрывные токены (пути, url) могут остаться шире 39: их режет word-break в CSS.
+  const REFLOW_WIDTH = 39;
+
+  function reflowLine(line, width) {
+    const ind = line.match(/^\s*/)[0];
+    let vcol = -1;
+    for (let i = ind.length + 2; i < ind.length + 16; i++) {
+      if (line[i] === ' ' && line[i + 1] === ' ') { vcol = i + 2; while (line[vcol] === ' ') vcol++; break; }
+    }
+    if (vcol > 28) vcol = -1;
+    const words = [...line.trim().matchAll(/(\s*)(\S+)/g)].map(m => ({ sp: m[1], w: m[2], srcCol: m.index + m[1].length }));
+    const rows = [];
+    let row = ind, rowW = ind.length;
+    for (const { sp, w, srcCol } of words) {
+      const need = rowW + (row === ind ? 0 : sp.length) + w.length;
+      if (row !== ind && need > width) {
+        rows.push(row.trimEnd());
+        let hang = vcol > 0 ? vcol : (sp.length >= 2 ? Math.min(srcCol, 24) : ind.length);
+        // неразрывный токен шире строки: глубокий отступ только мешает — прижимаем к исходному
+        if (hang + w.length > width) hang = ind.length;
+        row = ' '.repeat(hang); rowW = hang;
+        row += w; rowW += w.length;
+      } else {
+        const spStr = row === ind ? '' : sp;
+        row += spStr + w; rowW += spStr.length + w.length;
+      }
+    }
+    if (row.trim()) rows.push(row.trimEnd());
+    return rows;
+  }
+
+  function reflowData(data) {
+    return data.split('\n').flatMap(line => line.length <= REFLOW_WIDTH ? [line] : reflowLine(line, REFLOW_WIDTH)).join('\n');
+  }
+
   function view(pack, state, audience, opts) {
     opts = opts || {};
     const now = opts.now || 0;
@@ -435,7 +478,7 @@
       return Object.assign(v, {
         view: 'play',
         role: role && { id: role, name: r.name, mission: r.mission, welcomePrivate: r.welcomePrivate },
-        private: role && step ? step.private[role] : null,
+        private: role && step ? Object.assign({}, step.private[role], { data: reflowData(step.private[role].data) }) : null,
         myVote: role ? state.votes[role] || null : null,
         // Зритель без роли тоже голосует — как подсказка для разбора.
         audienceVote: !role && opts.token ? (state.audience || {})[opts.token] || null : null,
@@ -468,6 +511,6 @@
   return {
     ROLE_IDS, PHASE_SEC, START_TENSION,
     validate, maxScore, minScore, bestOption, verdict, grade,
-    createSession, apply, tally, tallyAudience, summary, report, view,
+    createSession, apply, tally, tallyAudience, summary, report, view, reflowData,
   };
 });
