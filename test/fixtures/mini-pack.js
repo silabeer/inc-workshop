@@ -1,6 +1,6 @@
 // Минимальный валидный пак для тестов движка и сервера: два шага, пять ролей.
 const roles = {};
-for (const [id, name] of [['commander', 'Командир инцидента'], ['scout', 'Скаут наблюдаемости'], ['engineer', 'Инженер платформы'], ['domain', 'Доменный специалист'], ['comms', 'Связной с бизнесом']]) {
+for (const [id, name] of [['commander', 'Координатор'], ['scout', 'SRE'], ['engineer', 'Platform Engineer'], ['domain', 'Разработчик'], ['comms', 'Коммуникации']]) {
   roles[id] = { name, mission: 'Миссия ' + id, welcomePrivate: 'Привет, ' + id };
 }
 const priv = tag => Object.fromEntries(Object.keys(roles).map(r => [r, { data: `секрет-${tag}-${r}`, deliver: `донести-${tag}-${r}` }]));

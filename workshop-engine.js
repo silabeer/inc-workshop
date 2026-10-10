@@ -287,7 +287,7 @@
         let optionId = cmd.option, decidedBy = 'gm';
         if (optionId === undefined || optionId === null) {
           if (!t.total) fail('Нет голосов — выберите вариант вручную');
-          if (!t.winner) fail('Ничья — Командир называет вариант, выберите его');
+          if (!t.winner) fail('Ничья — Координатор называет вариант, выберите его');
           optionId = t.winner; decidedBy = t.decidedBy;
         }
         const o = step.options.find(x => x.id === optionId);

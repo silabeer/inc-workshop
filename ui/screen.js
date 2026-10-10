@@ -41,7 +41,7 @@
       h('div', { class: 'panel' },
         h('h3', null, 'Команда «' + v.team + '» — ' + taken + ' из 5 на местах'),
         seats(v),
-        h('p', { class: 'muted', style: 'margin-top:.8rem' }, 'При ничьей решает Командир инцидента.')));
+        h('p', { class: 'muted', style: 'margin-top:.8rem' }, 'При ничьей решает Координатор.')));
   }
 
   // Проектор открыт не с localhost (Docker, прокси, интернет) — значит, этот адрес и доступен телефонам.
@@ -75,7 +75,7 @@
 
   function revealView(v) {
     const r = v.revealed, idx = v.step.options.findIndex(o => o.id === r.optionId);
-    const how = r.decidedBy === 'commander' ? ' — решил Командир при ничьей' : r.decidedBy === 'gm' ? ' — выбор ведущего' : '';
+    const how = r.decidedBy === 'commander' ? ' — решил Координатор при ничьей' : r.decidedBy === 'gm' ? ' — выбор ведущего' : '';
     const left = h('div', null,
       h('h2', { class: 's-title' }, v.step.title),
       h('p', { class: 's-picked' }, 'Команда выбрала: ', h('b', null, (idx + 1) + '. ' + r.label), how),

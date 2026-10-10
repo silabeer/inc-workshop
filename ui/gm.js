@@ -139,9 +139,9 @@
       h('p', { class: 'muted' }, 'Опросите роли по очереди. Зал советует, решают роли.'),
       h('div', { class: 'g-actions' }, h('button', { class: 'btn primary', onclick: () => send('voting') }, 'Открыть голосование'))];
     if (v.phase === 'voting') {
-      const byRole = v.seats.filter(s => v.votes[s.id]).map(s => s.name.split(' ')[0] + ' — ' + (v.step.options.findIndex(o => o.id === v.votes[s.id]) + 1));
-      const tieNote = t.tie && !t.winner ? h('p', { class: 'note-warn' }, 'Ничья. Командир называет вариант — выберите его в списке ниже.')
-        : t.tie ? h('p', null, 'Ничья — решает голос Командира: вариант ' + (v.step.options.findIndex(o => o.id === t.winner) + 1) + '.') : null;
+      const byRole = v.seats.filter(s => v.votes[s.id]).map(s => s.name + ' — ' + (v.step.options.findIndex(o => o.id === v.votes[s.id]) + 1));
+      const tieNote = t.tie && !t.winner ? h('p', { class: 'note-warn' }, 'Ничья. Координатор называет вариант — выберите его в списке ниже.')
+        : t.tie ? h('p', null, 'Ничья — решает голос Координатора: вариант ' + (v.step.options.findIndex(o => o.id === t.winner) + 1) + '.') : null;
       const a = v.audience;
       return [
         h('p', { class: 'g-tally' }, t.total + '/5' + (byRole.length ? ': ' + byRole.join(', ') : ': голосов пока нет')),

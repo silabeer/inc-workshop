@@ -13,7 +13,7 @@
   - «Новая партия» далеко от «Раскрыть последствия»;
   - проектор и телефоны не показывают приватку чужих ролей;
   - QR-код в лобби читается декодером и ведёт на адрес для телефонов;
-  - ничья (с голосом Командира и без), бумажный режим (голоса вписывает ведущий), голос зала;
+  - ничья (с голосом Координатора и без), бумажный режим (голоса вписывает ведущий), голос зала;
   - комнаты, код входа, звук, аналитика по архиву;
   - вход ведущего по PIN: сессия в cookie, PIN и токены не попадают в адреса запросов и в localStorage;
   - сбой диска сервера: пульт показывает предупреждение;
@@ -168,14 +168,14 @@ def run():
         check(got and got[0].text == url, f'QR в лобби не читается или ведёт не туда: {got[0].text if got else None!r} ≠ {url!r}')
         check(url.endswith('/#play'), f'адрес для телефонов: {url}')
 
-        names = {'Командир инцидента': 'commander', 'Скаут наблюдаемости': 'scout', 'Инженер платформы': 'engineer', 'Доменный специалист': 'domain', 'Связной с бизнесом': 'comms'}
+        names = {'Координатор': 'commander', 'SRE': 'scout', 'Platform Engineer': 'engineer', 'Разработчик': 'domain', 'Коммуникации': 'comms'}
         phones = {}
         ph = new_page(390, 844)
         ph.goto(BASE + '/#play')
         ph.wait_for_selector('.p-roles')
         shot(ph, 'phone-picker', full=True)
         phone_checks(ph, 'телефон/выбор роли')
-        ph.locator('.p-roles button', has_text='Скаут').click()
+        ph.locator('.p-roles button', has_text='SRE').click()
         wait_text(ph, 'Ваша миссия')
         phones['scout'] = ph
         ph = new_page(390, 844)
@@ -274,20 +274,20 @@ def run():
             small.close()
 
         # ---------- Заметка ведущего к шагу ----------
-        gm.fill('textarea.g-note', 'Скаут не прочитал срез — зал хотел рестарт')
+        gm.fill('textarea.g-note', 'SRE не прочитал срез — зал хотел рестарт')
         gm.get_by_role('button', name='Сохранить заметку').click()
         wait_text(gm, 'Заметка сохранена')
-        check('Скаут не прочитал срез' not in proj.inner_text('body'), 'заметка ведущего видна на проекторе')
+        check('SRE не прочитал срез' not in proj.inner_text('body'), 'заметка ведущего видна на проекторе')
 
-        # ---------- Шаг 2: ничья без голоса Командира — выбирает ведущий ----------
+        # ---------- Шаг 2: ничья без голоса Координатора — выбирает ведущий ----------
         print('Ничья и бумажный режим')
         api(gm, '/api/cmd', {'type': 'voting'})
         voters = [r for r in api_roles if r != 'commander'][:2]
         if len(voters) == 2:
             api(gm, '/api/vote', {'role': voters[0], 'token': 'tok-' + voters[0], 'option': opt(gm, 0)})
             api(gm, '/api/vote', {'role': voters[1], 'token': 'tok-' + voters[1], 'option': opt(gm, 1)})
-            wait_text(gm, 'Ничья. Командир называет вариант')
-            check(gm.get_by_role('button', name='Раскрыть последствия').is_disabled(), 'ничья без Командира: «Раскрыть последствия» должна быть недоступна')
+            wait_text(gm, 'Ничья. Координатор называет вариант')
+            check(gm.get_by_role('button', name='Раскрыть последствия').is_disabled(), 'ничья без Координатора: «Раскрыть последствия» должна быть недоступна')
             shot(gm, 'gm-tie', full=True)
             gm.locator('.g-opt button', has_text='Раскрыть этот вариант').nth(1).click()
             wait_text(proj, 'выбор ведущего')
@@ -295,18 +295,18 @@ def run():
             api(gm, '/api/cmd', {'type': 'reveal', 'option': opt(gm, 1)})
         api(gm, '/api/cmd', {'type': 'next'})
 
-        # ---------- Шаг 3: бумажный режим — ведущий вписывает голоса, ничья решается голосом Командира ----------
+        # ---------- Шаг 3: бумажный режим — ведущий вписывает голоса, ничья решается голосом Координатора ----------
         api(gm, '/api/cmd', {'type': 'voting'})
-        gm.wait_for_selector('select[aria-label="Голос за роль Командир инцидента"]')
+        gm.wait_for_selector('select[aria-label="Голос за роль Координатор"]')
         first, second = opt(gm, 0), opt(gm, 1)
-        for role_name, o in [('Командир инцидента', first), ('Доменный специалист', second)]:
+        for role_name, o in [('Координатор', first), ('Разработчик', second)]:
             sel = gm.locator(f'select[aria-label="Голос за роль {role_name}"]')
             if sel.count():
                 sel.select_option(o)
                 gm.wait_for_timeout(250)
-        wait_text(gm, 'решает голос Командира')
+        wait_text(gm, 'решает голос Координатора')
         gm.get_by_role('button', name='Раскрыть последствия').click()
-        wait_text(proj, 'решил Командир при ничьей')
+        wait_text(proj, 'решил Координатор при ничьей')
         shot(proj, 'screen-commander-tiebreak')
         api(gm, '/api/cmd', {'type': 'next'})
 
@@ -335,7 +335,7 @@ def run():
         stats = new_page(1280, 900)
         stats.goto(BASE + '/#stats')
         stats.wait_for_selector('.st-table')
-        wait_text(stats, 'Скаут не прочитал срез')  # заметка дошла до аналитики по архиву
+        wait_text(stats, 'SRE не прочитал срез')  # заметка дошла до аналитики по архиву
         shot(stats, 'stats', full=True)
         contrast(stats, 'аналитика')
         english(stats, 'аналитика')
@@ -366,7 +366,7 @@ def run():
         phone_checks(phc, 'телефон/код входа')
         phc.locator('.p-code').fill('K7Q2')
         phc.get_by_role('button', name='Продолжить').click()
-        phc.locator('.p-roles button', has_text='Связной').click()
+        phc.locator('.p-roles button', has_text='Коммуникации').click()
         wait_text(phc, 'Ваша миссия')
         wait_text(rp, '1 из 5')
 
@@ -395,7 +395,7 @@ def run():
         p2.on('request', lambda r: urls.append(r.url))
         p2.goto(BASE_PIN + '/#play')
         p2.wait_for_selector('.p-roles')
-        p2.locator('.p-roles button', has_text='Скаут').click()
+        p2.locator('.p-roles button', has_text='SRE').click()
         wait_text(p2, 'Ваша миссия')
         p2.reload()
         wait_text(p2, 'Ваша миссия')  # роль вернулась по cookie устройства

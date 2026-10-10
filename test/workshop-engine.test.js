@@ -107,7 +107,7 @@ test('подсчёт: большинство побеждает, кворум �
   assert.deepEqual(t.counts, { A: 3, B: 1, C: 1 });
 });
 
-test('ничья: решает голос Командира, если он среди лидеров', () => {
+test('ничья: решает голос Координатора, если он среди лидеров', () => {
   const s = votes(voting(), { commander: 'B', scout: 'A', engineer: 'A', domain: 'B' });
   const t = E.tally(PACK, s);
   assert.equal(t.tie, true);
@@ -118,7 +118,7 @@ test('ничья: решает голос Командира, если он ср
   assert.equal(r.journal[0].decidedBy, 'commander');
 });
 
-test('ничья без голоса Командира среди лидеров — ведущий выбирает вариант', () => {
+test('ничья без голоса Координатора среди лидеров — ведущий выбирает вариант', () => {
   const s = votes(voting(), { commander: 'C', scout: 'A', engineer: 'A', domain: 'B', comms: 'B' });
   assert.equal(E.tally(PACK, s).winner, null);
   assert.throws(() => E.apply(PACK, s, { type: 'reveal' }, 1), /Ничья/);
@@ -301,15 +301,15 @@ test('звук: настройка переживает откат', () => {
 
 test('заметки ведущего: по шагам, переживают откат, попадают в отчёт и только в пульт', () => {
   let s = run(E.createSession(PACK), { type: 'start' }, { type: 'voting' });
-  s = E.apply(PACK, s, { type: 'note', stepId: 's1', text: 'Скаут не прочитал S4 — зал проголосовал за рестарт' }, 3);
+  s = E.apply(PACK, s, { type: 'note', stepId: 's1', text: 'SRE не прочитал S4 — зал проголосовал за рестарт' }, 3);
   s = E.apply(PACK, s, { type: 'reveal', option: 'B' }, 4);
   s = E.apply(PACK, s, { type: 'undo' }, 5);
-  assert.equal(s.notes.s1, 'Скаут не прочитал S4 — зал проголосовал за рестарт');
+  assert.equal(s.notes.s1, 'SRE не прочитал S4 — зал проголосовал за рестарт');
   assert.throws(() => E.apply(PACK, s, { type: 'note', stepId: 'nope', text: 'x' }, 6), /Нет такого шага/);
-  assert.equal(E.view(PACK, s, 'gm', { now: 1 }).notes.s1.startsWith('Скаут'), true);
-  assert.ok(!JSON.stringify(E.view(PACK, s, 'screen', { now: 1 })).includes('Скаут не прочитал'), 'заметки не на проекторе');
+  assert.equal(E.view(PACK, s, 'gm', { now: 1 }).notes.s1.startsWith('SRE'), true);
+  assert.ok(!JSON.stringify(E.view(PACK, s, 'screen', { now: 1 })).includes('SRE не прочитал'), 'заметки не на проекторе');
   s = E.apply(PACK, s, { type: 'reveal', option: 'A' }, 7);
-  assert.match(E.report(PACK, s), /## Заметки ведущего\n\n- \*\*Первый шаг:\*\* Скаут не прочитал S4/);
+  assert.match(E.report(PACK, s), /## Заметки ведущего\n\n- \*\*Первый шаг:\*\* SRE не прочитал S4/);
   s = E.apply(PACK, s, { type: 'note', stepId: 's1', text: '  ' }, 8);
   assert.equal(s.notes.s1, undefined, 'пустая заметка удаляет');
 });
