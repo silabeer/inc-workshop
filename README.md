@@ -67,6 +67,20 @@ docker run -d --restart unless-stopped -p 8085:8085 -e GM_PIN=4821 -v inc-worksh
 Для игры через интернет: HTTPS, `GM_PIN` и код входа для телефонов (включается на пульте) —
 см. [руководство ведущего](docs/facilitator-guide.md#игра-через-интернет).
 
+### Прод: incidents.pro
+
+Живёт на VPS (Ubuntu, `93.77.183.171`, ssh `ubuntu@…`): Node 22 + Caddy, без Docker.
+
+- Код: `/opt/inc-workshop` (rsync из репозитория, без `state.json*`, `archive/`, `.venv/`, `.git/`);
+  состояние и архив — `/opt/inc-workshop-data`.
+- Сервис: `inc-workshop.service` (systemd, автостарт), конфиг — `/etc/inc-workshop.env`
+  (`PORT=3000`, `HOST=127.0.0.1`, `DATA_DIR`, `GM_PIN`, `TRUST_PROXY=private`).
+- Прокси: `/etc/caddy/Caddyfile` — `incidents.pro → 127.0.0.1:3000`, сертификат Let's Encrypt
+  (продление автоматом). **`encode` в Caddyfile не включать**: gzip ломает `text/event-stream` —
+  EventSource в браузере не получает событий.
+- Обновление: `rsync` (та же команда, что при заливке) → `sudo systemctl restart inc-workshop`;
+  сессии пульта живут в памяти — после рестарта ведущий вводит PIN заново, партия продолжится.
+
 ## Кейсы
 
 | Кейс | Шаги | О чём |
