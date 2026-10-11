@@ -565,6 +565,8 @@
       if (line[i] === ' ' && line[i + 1] === ' ') { vcol = i + 2; while (line[vcol] === ' ') vcol++; break; }
     }
     if (vcol > 28) vcol = -1;
+    // Пояснение «# текст»: перенос — под текстом, а не под решёткой.
+    const base = /^#\s/.test(line.trim()) ? ind.length + 2 : ind.length;
     const words = [...line.trim().matchAll(/(\s*)(\S+)/g)].map(m => ({ sp: m[1], w: m[2], srcCol: m.index + m[1].length }));
     const rows = [];
     let row = ind, rowW = ind.length;
@@ -572,7 +574,7 @@
       const need = rowW + (row === ind ? 0 : sp.length) + w.length;
       if (row !== ind && need > width) {
         rows.push(row.trimEnd());
-        let hang = vcol > 0 ? vcol : (sp.length >= 2 ? Math.min(srcCol, 24) : ind.length);
+        let hang = vcol > 0 ? vcol : (sp.length >= 2 ? Math.min(srcCol, 24) : base);
         // неразрывный токен шире строки: глубокий отступ только мешает — прижимаем к исходному
         if (hang + w.length > width) hang = ind.length;
         row = ' '.repeat(hang); rowW = hang;
@@ -586,8 +588,25 @@
     return rows;
   }
 
+  // Пояснение в паке разбито под ширину пульта (78): на телефоне его продолжение склеиваем с началом
+  // и переносим заново — «#   …» после «#»-строки или строка после незакрытой скобки.
+  const opens = l => (l.match(/\(/g) || []).length > (l.match(/\)/g) || []).length;
+  const indentOf = l => l.match(/^\s*/)[0].length;
+  function joinContinuations(lines) {
+    const out = [];
+    for (const line of lines) {
+      const prev = out[out.length - 1];
+      // продолжение: «#   …» на том же отступе, что «# …»; после незакрытой скобки — строка глубже по отступу
+      const hashCont = prev !== undefined && /^\s*#\s/.test(prev) && /^\s*#\s{2,}\S/.test(line) && indentOf(line) === indentOf(prev);
+      const parenCont = prev !== undefined && opens(prev) && /^\s+[^\s#(│├└┌─]/.test(line) && indentOf(line) > indentOf(prev); // рамки трейсов не трогаем
+      if (hashCont || parenCont) out[out.length - 1] = prev.trimEnd() + ' ' + line.trim().replace(/^#\s+/, '');
+      else out.push(line);
+    }
+    return out;
+  }
+
   function reflowData(data) {
-    return data.split('\n').flatMap(line => line.length <= REFLOW_WIDTH ? [line] : reflowLine(line, REFLOW_WIDTH)).join('\n');
+    return joinContinuations(data.split('\n')).flatMap(line => line.length <= REFLOW_WIDTH ? [line] : reflowLine(line, REFLOW_WIDTH)).join('\n');
   }
 
   // Проектору — только явный список полей: текст лички остаётся у адресата, критерий исхода — у ведущего.

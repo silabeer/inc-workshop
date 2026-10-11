@@ -179,7 +179,7 @@
     let body;
     if (!v.role) body = spectator ? spectatorScreen(v) : picker(v);
     else if (v.phase === 'lobby') body = h('div', { class: 'p-sect' }, h('h2', null, 'Ваша миссия'), h('p', null, v.role.mission),
-      h('div', { class: 'deliver' }, h('b', null, 'Только для вас: '), v.role.welcomePrivate),
+      h('div', { class: 'deliver welcome' }, h('b', null, 'Только для вас'), '\n', v.role.welcomePrivate),
       h('p', { class: 'p-status' }, 'Ждём старта. Команда «' + v.team + '».'));
     else if (v.phase === 'end') body = h('div', { class: 'p-sect' }, h('h2', null, v.summary.grade.label),
       h('p', null, 'Очки команды: ' + v.summary.score + ' из ' + v.summary.max + '.'), h('p', { class: 'p-note' }, 'Разбор — на проекторе. Спасибо за игру!'));

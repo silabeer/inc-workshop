@@ -547,3 +547,21 @@ test('новый человек на бридже: только проектор
   assert.equal(new Set(labels).size, labels.length);
   assert.ok(labels.includes('Личка SRE: PM'));
 });
+
+test('reflowData: пояснение, разбитое под ширину пульта, на телефоне склеивается и переносится заново', () => {
+  // «#»-комментарий с продолжением «#   …»: одна мысль, перенос — под текстом, а не под решёткой
+  const hash = E.reflowData('  # handshake — «рукопожатие»: установка защищённого\n  #   (TLS) соединения клиента с сервером');
+  assert.ok(!hash.includes('#   '), hash);
+  assert.ok(hash.split('\n').every(l => l.length <= 39), hash);
+  assert.ok(hash.split('\n').slice(1).every(l => l.startsWith('    ')), 'продолжение — под текстом комментария:\n' + hash);
+  // незакрытая скобка: продолжение на следующей строке приклеивается
+  const paren = E.reflowData('  p99   240 ms → 3 000 ms      (p99 — время 1% самых медленных\n                                ответов; ровная полка на 3 000)');
+  assert.match(paren.replace(/\s+/g, ' '), /самых медленных ответов; ровная полка/);
+  // обычные строки данных не склеиваются
+  assert.equal(E.reflowData('Карта сервисов\n  edge  [RED]'), 'Карта сервисов\n  edge  [RED]');
+});
+
+test('reflowData: строки того же уровня после незакрытой скобки и чужой «#» не склеиваются', () => {
+  assert.equal(E.reflowData('service (active\nowner  payments'), 'service (active\nowner  payments');
+  assert.equal(E.reflowData('  # первый факт\n#   второй факт'), '  # первый факт\n#   второй факт');
+});

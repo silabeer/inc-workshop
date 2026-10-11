@@ -331,7 +331,7 @@
         h('span', { class: 'muted' }, p.meta.title + ': по стопке на роль, ведущий раздаёт карточку шага в начале раунда.')),
       Object.keys(p.roles).map((id, n) => [
         h('div', { class: 'card' + (n ? ' card-role' : '') }, h('h2', null, p.roles[id].name), h('p', null, p.roles[id].mission),
-          h('div', { class: 'deliver' }, h('b', null, 'Только для вас: '), p.roles[id].welcomePrivate)),
+          h('div', { class: 'deliver welcome' }, h('b', null, 'Только для вас'), '\n', p.roles[id].welcomePrivate)),
         p.steps.map((st, i) => h('div', { class: 'card' },
           h('p', { class: 'muted' }, p.roles[id].name + ' · шаг ' + (i + 1) + ' из ' + p.steps.length),
           h('h3', null, st.title), h('pre', { class: 'data' }, st.private[id].data),
