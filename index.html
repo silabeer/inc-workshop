@@ -130,6 +130,17 @@
   .recap .r-better { color: var(--muted); }
   .recap .r-pts { grid-row: 1 / span 2; grid-column: 3; font-family: var(--cond); font-weight: 700; font-size: 1.25rem; align-self: center; text-align: right; }
   .s-cause { font-size: .95rem; line-height: 1.5; white-space: pre-wrap; }
+  /* Вброс на проекторе: звонок — красным во всю ширину, личка и алерт — спокойнее. */
+  .s-int { display: flex; justify-content: space-between; align-items: center; gap: .4rem 1.4rem; flex-wrap: wrap; margin-top: .8rem; padding: .6rem 1.1rem; border-radius: 8px; font-size: 1.3rem; }
+  .s-int.fresh { animation: s-int-in .9s ease-out; }
+  .s-int-what { display: flex; gap: .3rem 1rem; align-items: baseline; flex-wrap: wrap; min-width: 0; }
+  .s-int b { font-family: var(--cond); font-weight: 700; font-size: 1.7rem; }
+  .s-int-status { font-family: var(--cond); font-weight: 600; display: flex; gap: 1rem; align-items: baseline; }
+  .s-int .timer { color: inherit; }
+  .s-int.call { background: var(--sev); color: #fff; }
+  .s-int.ping, .s-int.joiner { background: var(--info-bg); color: var(--ink); border-left: 6px solid var(--info); }
+  .s-int.alert, .s-int.outage, .s-int.handover { background: var(--warn-bg); color: var(--ink); border-left: 6px solid var(--warn); }
+  @keyframes s-int-in { 50% { opacity: .55; } }
   @media (max-height: 820px) and (min-width: 641px) {
     #screen .wrap { padding-top: .8rem; padding-bottom: .8rem; }
     .s-title { font-size: 2rem; margin-bottom: .5rem; }
@@ -138,6 +149,8 @@
     .s-options li { padding: .4rem .9rem; font-size: 1.15rem; }
     .s-reveal { font-size: 1.35rem; }
     .s-lobby h1, .s-final-head h1 { font-size: 2.6rem; }
+    .s-int { padding: .45rem 1rem; font-size: 1.15rem; }
+    .s-int b { font-size: 1.45rem; }
   }
 
   /* ================= Телефон роли ================= */
@@ -159,6 +172,14 @@
   .p-vote .btn { justify-content: flex-start; text-align: left; width: 100%; min-height: 52px; font-family: var(--sans); font-weight: 500; font-size: 1rem; }
   .p-vote .btn.mine { background: var(--ink); color: var(--paper); opacity: 1; }
   .p-note { color: var(--muted); font-size: .9rem; margin-top: .6rem; }
+  .p-int { margin-top: .9rem; padding: .7rem .8rem; border-radius: 8px; background: var(--info-bg); border-left: 6px solid var(--info); display: flex; flex-direction: column; gap: .45rem; }
+  .p-int.call { background: var(--sev); color: #fff; border-left: 0; }
+  .p-int.warn { background: var(--warn-bg); border-left-color: var(--warn); }
+  .p-int.call .btn { border-color: #fff; color: #fff; }
+  .p-int b { font-family: var(--cond); font-weight: 700; font-size: 1.2rem; }
+  .p-int .btn { width: 100%; }
+  .p-int .timer { color: inherit; font-size: 1rem; }
+  .p-int-st { font-weight: 600; }
 
   /* ================= Пульт ведущего ================= */
   #gm .wrap { max-width: 1440px; margin: 0 auto; padding: 1rem 1.4rem 2rem; }
@@ -202,6 +223,9 @@
   .g-links a { color: var(--info); }
   .note-warn { background: var(--warn-bg); color: var(--ink); border-left: 4px solid var(--warn); padding: .3rem .6rem; border-radius: 0 4px 4px 0; font-weight: 600; }
   .g-storage { margin: .6rem 0; }
+  .g-int.call { border-color: var(--sev); }
+  .g-int h3 .timer { font-size: 1rem; }
+  .g-int p { margin-top: .3rem; }
   .g-pin { max-width: 22rem; margin: 18vh auto 0; }
   .g-pin input { font-size: 1.6rem; letter-spacing: .3em; text-align: center; }
   .g-final ol { margin: 0; padding-left: 1.3rem; }

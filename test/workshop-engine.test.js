@@ -359,3 +359,191 @@ test('view(play): приватка приходит переформатиров
   const gm = E.view(p, s, 'gm', { now: 1 });
   assert.equal(gm.step.private.scout.data, 'колонка        ' + long, 'пульт видит оригинал');
 });
+
+/* ---------- Вбросы ---------- */
+
+test('validate: вбросы — виды, поля, адресат лички, ровно один звонок', () => {
+  const p = fresh(); delete p.distractions;
+  assert.ok(E.validate(p).some(e => e.includes('хотя бы один вброс')));
+  const q = fresh(); q.distractions[2].kind = 'gossip';
+  assert.ok(E.validate(q).some(e => e.includes('kind gossip')));
+  const r = fresh(); r.distractions[1].role = 'boss';
+  assert.ok(E.validate(r).some(e => e.includes('role boss')));
+  const w = fresh(); w.distractions[0].win = '';
+  assert.ok(E.validate(w).some(e => e.includes('пустое поле win')));
+  const c = fresh(); c.distractions[2].kind = 'call';
+  assert.ok(E.validate(c).some(e => e.includes('ровно один звонок')));
+  const n = fresh(); n.distractions = n.distractions.filter(d => d.kind !== 'call');
+  assert.ok(E.validate(n).some(e => e.includes('ровно один звонок')));
+  const d = fresh(); d.distractions[1].id = 'cto';
+  assert.ok(E.validate(d).some(e => e.includes('повторный id')));
+});
+
+test('вброс: только во время шага, по одному, каждый — раз за партию', () => {
+  assert.throws(() => run(E.createSession(PACK), { type: 'interrupt', id: 'cto' }), /только во время шага/);
+  const s = run(E.createSession(PACK), { type: 'start' }, { type: 'interrupt', id: 'cto' });
+  assert.deepEqual(s.interrupt, { id: 'cto', stepId: 's1', at: 2000, takenBy: null, dismissed: false });
+  assert.throws(() => E.apply(PACK, s, { type: 'interrupt', id: 'bk' }, 3000), /Сначала закройте/);
+  assert.throws(() => run(E.createSession(PACK), { type: 'start' }, { type: 'interrupt', id: 'nope' }), /Нет такого вброса/);
+  const done = E.apply(PACK, s, { type: 'resolve', outcome: 'held' }, 3000);
+  assert.throws(() => E.apply(PACK, done, { type: 'interrupt', id: 'cto' }, 4000), /уже был/);
+});
+
+test('вброс: до закрытия нельзя дальше и к итогам', () => {
+  const s = run(E.createSession(PACK), { type: 'start' }, { type: 'voting' }, { type: 'reveal', option: 'A' }, { type: 'interrupt', id: 'bk' });
+  assert.throws(() => E.apply(PACK, s, { type: 'next' }, 9000), /закройте вброс/);
+  assert.throws(() => E.apply(PACK, s, { type: 'finish' }, 9000), /закройте вброс/);
+  const n = E.apply(PACK, E.apply(PACK, s, { type: 'resolve', outcome: 'lost' }, 9000), { type: 'next' }, 9500);
+  assert.equal(n.stepIndex, 1);
+});
+
+test('звонок: берут Координатор или Коммуникации, один раз; на звонке Координатор не голосует', () => {
+  let s = run(E.createSession(PACK), { type: 'start' }, { type: 'voting' }, { type: 'interrupt', id: 'cto' });
+  assert.throws(() => E.apply(PACK, s, { type: 'takeCall', role: 'scout' }, 4000), /Координатор или Коммуникации/);
+  s = E.apply(PACK, s, { type: 'takeCall', role: 'commander' }, 4000);
+  assert.throws(() => E.apply(PACK, s, { type: 'takeCall', role: 'comms' }, 4000), /уже взяли/);
+  assert.throws(() => E.apply(PACK, s, { type: 'vote', role: 'commander', option: 'A' }, 4000), /на звонке/);
+  s = E.apply(PACK, s, { type: 'vote', role: 'scout', option: 'A' }, 4000); // остальные голосуют
+  assert.equal(E.view(PACK, s, 'play', { token: 'x' }).voteBlocked, null);
+  // Коммуникации на звонке голос не теряют
+  let m = run(E.createSession(PACK), { type: 'start' }, { type: 'voting' }, { type: 'interrupt', id: 'cto' });
+  m = E.apply(PACK, E.apply(PACK, m, { type: 'takeCall', role: 'comms' }, 4000), { type: 'vote', role: 'comms', option: 'A' }, 4100);
+  assert.equal(m.votes.comms, 'A');
+  // голос, поданный до звонка, остаётся
+  let t = run(E.createSession(PACK), { type: 'start' }, { type: 'voting' });
+  t = E.apply(PACK, t, { type: 'vote', role: 'commander', option: 'C' }, 3000);
+  t = E.apply(PACK, E.apply(PACK, t, { type: 'interrupt', id: 'cto' }, 3500), { type: 'takeCall', role: 'commander' }, 3600);
+  assert.equal(t.votes.commander, 'C');
+});
+
+test('личка: закрывает только адресат; resolve двигает шкалы, но не очки, и пишет журнал', () => {
+  let s = run(E.createSession(PACK), { type: 'start' }, { type: 'interrupt', id: 'pm' });
+  assert.throws(() => E.apply(PACK, s, { type: 'dismiss', role: 'comms' }, 3000), /никто не пишет/);
+  s = E.apply(PACK, s, { type: 'dismiss', role: 'scout' }, 3000);
+  assert.equal(s.interrupt.dismissed, true);
+  assert.throws(() => E.apply(PACK, s, { type: 'resolve', outcome: 'meh' }, 3000), /held \| lost/);
+  const r = E.apply(PACK, s, { type: 'resolve', outcome: 'lost' }, 12000);
+  assert.equal(r.score, 0);
+  assert.deepEqual(r.metrics, { tension: E.START_TENSION + 5, money: 0, ttrMin: 2 });
+  assert.deepEqual(r.interrupts, [{ id: 'pm', kind: 'ping', stepId: 's1', sec: 10, takenBy: null, outcome: 'lost' }]);
+  assert.equal(r.interrupt, null);
+  const h = E.apply(PACK, E.apply(PACK, r, { type: 'interrupt', id: 'bk' }, 13000), { type: 'resolve', outcome: 'held' }, 14000);
+  assert.equal(h.metrics.tension, E.START_TENSION + 5 - 3);
+});
+
+test('вброс: откат запуска и закрытия; старые снимки без полей вбросов', () => {
+  const s = run(E.createSession(PACK), { type: 'start' }, { type: 'interrupt', id: 'cto' }, { type: 'resolve', outcome: 'lost' });
+  const u1 = E.apply(PACK, s, { type: 'undo' }, 9000);
+  assert.equal(u1.interrupt.id, 'cto');
+  assert.equal(u1.metrics.tension, E.START_TENSION);
+  assert.deepEqual(u1.interrupts, []);
+  const u2 = E.apply(PACK, u1, { type: 'undo' }, 9000);
+  assert.equal(u2.interrupt, null);
+  // партия, сохранённая до вбросов: в снимке истории нет interrupt/interrupts
+  const old = run(E.createSession(PACK), { type: 'start' }, { type: 'discussion' });
+  for (const h of old.history) { delete h.interrupt; delete h.interrupts; }
+  delete old.interrupt; delete old.interrupts;
+  const back = E.apply(PACK, old, { type: 'undo' }, 9000);
+  assert.equal(back.interrupt, null);
+  assert.deepEqual(back.interrupts, []);
+  assert.equal(E.view(PACK, old, 'screen').interrupt, null);
+  assert.deepEqual(E.view(PACK, old, 'gm').interrupts, []);
+});
+
+test('вброс: проектор видит звонок и алерт, но не текст лички и не критерий; телефон — только участник', () => {
+  const call = run(E.createSession(PACK, { seats: { commander: 't-c', comms: 't-m', scout: 't-s' } }), { type: 'start' }, { type: 'interrupt', id: 'cto' });
+  const sc = E.view(PACK, call, 'screen').interrupt;
+  assert.deepEqual(sc, { kind: 'call', title: 'Звонок CTO', from: 'CTO', text: '«Координатора — в звонок»', roleName: null, at: 2000, takenByName: null, dismissed: false });
+  assert.equal(E.view(PACK, call, 'play', { token: 't-c' }).interrupt.kind, 'call');
+  assert.equal(E.view(PACK, call, 'play', { token: 't-m' }).interrupt.kind, 'call');
+  assert.equal(E.view(PACK, call, 'play', { token: 't-s' }).interrupt, null);
+  const taken = E.apply(PACK, call, { type: 'takeCall', role: 'comms' }, 3000);
+  assert.equal(E.view(PACK, taken, 'screen').interrupt.takenByName, 'Коммуникации');
+
+  const ping = run(E.createSession(PACK, { seats: { scout: 't-s', comms: 't-m' } }), { type: 'start' }, { type: 'interrupt', id: 'pm' });
+  const json = JSON.stringify(E.view(PACK, ping, 'screen'));
+  assert.ok(!json.includes('секрет-лички') && !json.includes('Отложил'), 'текст лички и критерий не на проекторе');
+  assert.equal(E.view(PACK, ping, 'screen').interrupt.title, 'Личка: SRE');
+  assert.equal(E.view(PACK, ping, 'play', { token: 't-s' }).interrupt.text, 'секрет-лички');
+  assert.equal(E.view(PACK, ping, 'play', { token: 't-m' }).interrupt, null);
+  assert.ok(!JSON.stringify(E.view(PACK, ping, 'play', { token: 't-m' })).includes('секрет-лички'));
+  const gm = E.view(PACK, ping, 'gm');
+  assert.equal(gm.interrupt.title, 'Личка SRE: PM');
+  assert.equal(gm.distractions.find(d => d.id === 'pm').win, 'Отложил');
+});
+
+test('вбросы в итогах и отчёте', () => {
+  let s = run(E.createSession(PACK), { type: 'start' }, { type: 'interrupt', id: 'cto' });
+  s = E.apply(PACK, s, { type: 'takeCall', role: 'comms' }, 3000);
+  s = run(s, { type: 'resolve', outcome: 'held' }, { type: 'interrupt', id: 'bk' }, { type: 'resolve', outcome: 'lost' });
+  s = run(s, { type: 'finish' });
+  assert.deepEqual(E.summary(PACK, s).interrupts, { total: 2, held: 1 });
+  const md = E.report(PACK, s);
+  assert.match(md, /## Вбросы: отбили 1 из 2/);
+  assert.match(md, /Звонок CTO \(Первый шаг, .*\): отбили, трубку взял\(и\): Коммуникации/);
+  assert.match(md, /Алерт: \[WARNING\] backup-job \(Первый шаг, .*\): сбило/);
+});
+
+test('validate: отказ инструмента адресован роли с данными, handover без роли', () => {
+  const p = fresh(); delete p.distractions.find(d => d.kind === 'outage').role;
+  assert.ok(E.validate(p).some(e => e.includes('role undefined')));
+  const q = fresh(); q.distractions.find(d => d.kind === 'outage').role = 'commander';
+  assert.ok(E.validate(q).some(e => e.includes('у Координатора нет данных')));
+});
+
+test('отказ инструмента: у адресата нет данных шага, у остальных есть; проектор знает, кто без данных', () => {
+  const seats = { scout: 't-s', engineer: 't-e' };
+  const s = run(E.createSession(PACK, { seats }), { type: 'start' }, { type: 'interrupt', id: 'graf' });
+  const mine = E.view(PACK, s, 'play', { token: 't-s' });
+  assert.deepEqual(mine.private, { hidden: true });
+  assert.ok(!JSON.stringify(mine).includes('секрет-s1-scout'));
+  assert.equal(mine.interrupt.kind, 'outage');
+  assert.equal(E.view(PACK, s, 'play', { token: 't-e' }).private.data, 'секрет-s1-engineer');
+  assert.equal(E.view(PACK, s, 'play', { token: 't-e' }).interrupt, null);
+  const sc = E.view(PACK, s, 'screen').interrupt;
+  assert.equal(sc.title, 'Отказ: Grafana');
+  assert.equal(sc.roleName, 'SRE');
+  const back = E.apply(PACK, s, { type: 'resolve', outcome: 'held' }, 5000);
+  assert.equal(E.view(PACK, back, 'play', { token: 't-s' }).private.data, 'секрет-s1-scout');
+});
+
+test('выбыл Координатор: не голосует и без данных, командование берёт другая роль и решает ничью', () => {
+  const seats = { commander: 't-c', scout: 't-s' };
+  let s = run(E.createSession(PACK, { seats }), { type: 'start' }, { type: 'voting' }, { type: 'interrupt', id: 'out' });
+  assert.throws(() => E.apply(PACK, s, { type: 'vote', role: 'commander', option: 'A' }, 4000), /выбыли/);
+  const cmd = E.view(PACK, s, 'play', { token: 't-c' });
+  assert.deepEqual(cmd.private, { hidden: true });
+  assert.equal(cmd.interrupt.out, true);
+  assert.equal(cmd.voteBlocked, 'Вы выбыли — командует другая роль');
+  assert.equal(E.view(PACK, s, 'play', { token: 't-s' }).interrupt.out, false);
+  assert.throws(() => E.apply(PACK, s, { type: 'takeCommand', role: 'commander' }, 4000), /остальных ролей/);
+  // ничья до того, как кто-то взял командование, — решает ведущий
+  s = votes(s, { scout: 'A', engineer: 'C' });
+  assert.equal(E.tally(PACK, s).winner, null);
+  assert.equal(E.tally(PACK, s).namer, null);
+  assert.throws(() => E.apply(PACK, s, { type: 'reveal' }, 4400), /решающего голоса нет/);
+  s = E.apply(PACK, s, { type: 'takeCommand', role: 'engineer' }, 4500);
+  assert.throws(() => E.apply(PACK, s, { type: 'takeCommand', role: 'scout' }, 4600), /уже взяли/);
+  const t = E.tally(PACK, s);
+  assert.equal(t.winner, 'C');
+  assert.equal(t.decidedBy, 'acting');
+  const r = E.apply(PACK, s, { type: 'reveal' }, 5000);
+  assert.equal(r.journal[0].decidedBy, 'acting');
+  assert.equal(E.view(PACK, r, 'screen').revealed.decidedBy, 'acting');
+  assert.equal(E.view(PACK, s, 'screen').interrupt.takenByName, 'Platform Engineer');
+  // после возвращения ничью снова решает Координатор
+  const back = E.apply(PACK, r, { type: 'resolve', outcome: 'held' }, 6000);
+  assert.equal(back.interrupts[0].takenBy, 'engineer');
+  assert.equal(E.view(PACK, back, 'play', { token: 't-c' }).voteBlocked, null);
+  assert.match(E.report(PACK, E.apply(PACK, back, { type: 'finish' }, 7000)), /Координатор выбыл .*командовал\(и\): Platform Engineer/);
+});
+
+test('новый человек на бридже: только проектор; подписи пульта различают вбросы одного вида', () => {
+  const s = run(E.createSession(PACK, { seats: { comms: 't-m' } }), { type: 'start' }, { type: 'interrupt', id: 'mkt' });
+  assert.equal(E.view(PACK, s, 'screen').interrupt.title, 'Новые люди на бридже');
+  assert.equal(E.view(PACK, s, 'screen').interrupt.from, 'Маркетинг');
+  assert.equal(E.view(PACK, s, 'play', { token: 't-m' }).interrupt, null);
+  const labels = E.view(PACK, s, 'gm').distractions.map(d => d.label);
+  assert.equal(new Set(labels).size, labels.length);
+  assert.ok(labels.includes('Личка SRE: PM'));
+});

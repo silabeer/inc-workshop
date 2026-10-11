@@ -28,6 +28,14 @@ module.exports = {
       ],
     },
   ],
+  distractions: [
+    { id: 'cto', kind: 'call', from: 'CTO', text: '«Координатора — в звонок»', win: 'Трубку взяли Коммуникации' },
+    { id: 'pm', kind: 'ping', role: 'scout', from: 'PM', text: 'секрет-лички', win: 'Отложил' },
+    { id: 'bk', kind: 'alert', from: 'Alertmanager', text: '[WARNING] backup-job', win: 'Проверили одной фразой' },
+    { id: 'mkt', kind: 'joiner', from: 'Маркетинг', text: '«Что происходит? Коротко»', win: 'Сводка за 30 секунд' },
+    { id: 'graf', kind: 'outage', role: 'scout', from: 'Grafana', text: '502 Bad Gateway', win: 'Цифры дали устно' },
+    { id: 'out', kind: 'handover', from: 'Координатор', text: 'Телефон сел', win: 'Командование передали вслух' },
+  ],
   end: {
     grades: [
       { min: 4, label: 'Образцово', text: 'Всё по данным' },

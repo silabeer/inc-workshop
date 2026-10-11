@@ -140,7 +140,9 @@
       h('div', { class: 'g-actions' }, h('button', { class: 'btn primary', onclick: () => send('voting') }, 'Открыть голосование'))];
     if (v.phase === 'voting') {
       const byRole = v.seats.filter(s => v.votes[s.id]).map(s => s.name + ' — ' + (v.step.options.findIndex(o => o.id === v.votes[s.id]) + 1));
-      const tieNote = t.tie && !t.winner ? h('p', { class: 'note-warn' }, 'Ничья. Координатор называет вариант — выберите его в списке ниже.')
+      const tieNote = t.tie && !t.winner ? h('p', { class: 'note-warn' }, t.namer ? 'Ничья. ' + v.roles[t.namer].name + (t.namer === 'commander' ? '' : ' (командует)') + ' называет вариант — выберите его в списке ниже.'
+        : 'Ничья. Решающего голоса нет — выберите вариант сами в списке ниже.')
+        : t.tie && t.decidedBy === 'acting' ? h('p', null, 'Ничья — решает исполняющий обязанности Координатора: вариант ' + (v.step.options.findIndex(o => o.id === t.winner) + 1) + '.')
         : t.tie ? h('p', null, 'Ничья — решает голос Координатора: вариант ' + (v.step.options.findIndex(o => o.id === t.winner) + 1) + '.') : null;
       const a = v.audience;
       return [
@@ -156,7 +158,8 @@
       return [
         h('p', null, 'Выбрано: ', h('b', null, o.label), ' ', verdictTag(o.verdict)),
         h('div', { class: 'g-hint' }, h('b', null, 'Для мини-разбора: '), o.debrief),
-        h('div', { class: 'g-actions', style: 'margin-top:.7rem' }, h('button', { class: 'btn primary', onclick: () => send('next') }, nextLabel))];
+        h('div', { class: 'g-actions', style: 'margin-top:.7rem' }, h('button', { class: 'btn primary', disabled: !!v.interrupt, onclick: () => send('next') }, nextLabel),
+          v.interrupt ? h('span', { class: 'muted' }, 'Сначала закройте вброс.') : null)];
     }
     return [];
   }
@@ -201,6 +204,36 @@
       }));
   }
 
+  // Вбросы: кнопки запуска; активный — что идёт, критерий «отбили» и исход.
+  function interruptPanel(v) {
+    const i = v.interrupt, done = v.interrupts.length, held = v.interrupts.filter(x => x.outcome === 'held').length;
+    const tally = done ? h('p', { class: 'muted' }, 'Было вбросов: ' + done + ', отбили ' + held + '.') : null;
+    if (!i) return h('div', { class: 'panel' }, h('h3', null, 'Вбросы — отвлекают команду от решения'),
+      h('div', { class: 'g-actions' }, v.distractions.map(d => h('button', {
+        class: 'btn small' + (d.kind === 'call' ? ' danger' : ''), disabled: d.used,
+        title: d.used ? 'Уже было в этой партии' : d.text, onclick: () => send('interrupt', { id: d.id }),
+      }, d.label))), tally);
+    const d = v.distractions.find(x => x.id === i.id);
+    const roleName = id => v.roles[id].name;
+    return h('div', { class: 'panel g-int' + (i.kind === 'call' ? ' call' : '') }, h('h3', null, 'Идёт вброс: ' + i.title + ' · ', UI.elapsed(i.at)),
+      h('p', null, i.kind === 'handover' ? null : h('b', null, d.from + ': '), d.text),
+      i.kind === 'call' ? h('p', null, i.takenBy ? 'Трубку взяли: ' + roleName(i.takenBy) + (i.takenBy === 'commander' ? ' — голос Координатора недоступен' : '') : 'Трубку пока никто не взял.') : null,
+      i.kind === 'outage' ? h('p', null, 'Телефон роли «' + roleName(d.role) + '» не показывает данные шага. Без телефона — не зачитывайте ей карточку, пока вброс идёт.') : null,
+      i.kind === 'handover' ? h('p', null, i.takenBy ? 'Командует: ' + roleName(i.takenBy) + ' — решает ничью; Координатор не голосует.' : 'Координатор не голосует и не видит данных. Командование пока никто не взял — ничью решаете вы.') : null,
+      i.kind === 'ping' ? h('p', null, i.dismissed ? roleName(d.role) + ': отложено.' : 'Без телефона прочитайте роли «' + roleName(d.role) + '» на ухо.') : null,
+      h('div', { class: 'g-hint' }, h('b', null, 'Отбили, если: '), d.win),
+      i.kind === 'call' && !i.takenBy ? h('div', { class: 'g-actions', style: 'margin-top:.6rem' },
+        ['commander', 'comms'].map(r => h('button', { class: 'btn small', onclick: () => send('takeCall', { role: r }) }, 'Взяли: ' + roleName(r)))) : null,
+      i.kind === 'handover' && !i.takenBy ? h('div', { class: 'g-actions', style: 'margin-top:.6rem' },
+        ['scout', 'engineer', 'domain', 'comms'].map(r => h('button', { class: 'btn small', onclick: () => send('takeCommand', { role: r }) }, 'Командует: ' + roleName(r)))) : null,
+      i.kind === 'ping' && !i.dismissed ? h('div', { class: 'g-actions', style: 'margin-top:.6rem' },
+        h('button', { class: 'btn small', onclick: () => send('dismiss', { role: d.role }) }, 'Отметить: отложено')) : null,
+      h('div', { class: 'g-actions', style: 'margin-top:.6rem' },
+        h('button', { class: 'btn primary', onclick: () => send('resolve', { outcome: 'held' }) }, 'Отбили (напряжение −3)'),
+        h('button', { class: 'btn', onclick: () => send('resolve', { outcome: 'lost' }) }, 'Сбило (напряжение +5, TTR +2)')),
+      tally);
+  }
+
   // Заметка к шагу: что заметили на прогоне (кто промолчал, что сбило, где раскололось голосование).
   // Видна только ведущему, попадает в отчёт, архив и аналитику по архиву.
   function notePanel(v) {
@@ -221,7 +254,7 @@
         optionsPanel(v),
         notePanel(v),
         v.upcoming.length ? h('p', { class: 'muted' }, 'Дальше: ' + v.upcoming.join(' → ')) : null),
-      h('div', { class: 'g-col' }, privatePanel(v), seatsPanel(v), links(v), dangerZone(v)));
+      h('div', { class: 'g-col' }, interruptPanel(v), privatePanel(v), seatsPanel(v), links(v), dangerZone(v)));
   }
 
   /* ---------- Итоги ---------- */
@@ -231,6 +264,7 @@
       h('div', { class: 'g-col' },
         h('div', { class: 'panel' }, h('h2', null, s ? s.grade.label : 'Итоги'),
           s ? h('p', { style: 'margin-top:.4rem' }, 'Очки ' + s.score + ' из ' + s.max + ' · лучших решений ' + s.best + ' из ' + s.steps.length + ' · ловушки ' + s.traps + ' · потери ' + rub(s.metrics.money) + ' · TTR ' + s.metrics.ttrMin + ' мин · игра ' + mmss(s.totalSec)) : null,
+          s && s.interrupts.total ? h('p', { class: 'muted', style: 'margin-top:.4rem' }, 'Вбросы: отбили ' + s.interrupts.held + ' из ' + s.interrupts.total + '.') : null,
           s && s.audienceSplit ? h('p', { class: 'muted', style: 'margin-top:.4rem' }, 'Зал не согласился с ролями на ' + s.audienceSplit + ' шаг(ах) — подробности в отчёте.') : null,
           h('div', { class: 'g-actions', style: 'margin-top:.8rem' }, h('button', { class: 'btn primary', onclick: () => copy(v.report) }, 'Скопировать итоги'),
             h('a', { class: 'btn', href: UI.BASE + '#stats', target: '_blank' }, 'Аналитика по архиву'))),

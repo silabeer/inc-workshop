@@ -14,6 +14,8 @@
   - проектор и телефоны не показывают приватку чужих ролей;
   - QR-код в лобби читается декодером и ведёт на адрес для телефонов;
   - ничья (с голосом Координатора и без), бумажный режим (голоса вписывает ведущий), голос зала;
+  - вбросы: звонок красным на проекторе (и на 720p), трубку берут Коммуникации, личка — только адресату,
+    отказ инструмента прячет данные роли, выбывшего Координатора сменяет роль с телефона, человек на бридже;
   - комнаты, код входа, звук, аналитика по архиву;
   - вход ведущего по PIN: сессия в cookie, PIN и токены не попадают в адреса запросов и в localStorage;
   - сбой диска сервера: пульт показывает предупреждение;
@@ -273,6 +275,115 @@ def run():
             contrast(small, f'проектор 720p/{theme}')
             small.close()
 
+        # ---------- Вбросы: звонок красным на проекторе, личка адресату, посторонний алерт ----------
+        print('Вбросы')
+        dis = {}
+        for d in gm_view(gm)['distractions']:
+            dis.setdefault(d['kind'], d)  # первый вброс каждого вида
+        gm.locator('.panel button.danger', has_text='Звонок').click()
+        proj.wait_for_selector('.s-int.call')
+        proj.wait_for_timeout(1300)  # мигание при появлении закончилось
+        red = proj.evaluate("() => getComputedStyle(document.querySelector('.s-int.call')).backgroundColor")
+        sev = proj.evaluate("() => { const e = document.createElement('i'); e.style.color = 'var(--sev)'; document.body.appendChild(e); const c = getComputedStyle(e).color; e.remove(); return c; }")
+        check(red == sev, f'проектор: звонок не красный ({red} ≠ {sev})')
+        check('Звонок' in proj.locator('.s-int b').inner_text(), 'проектор: заголовок звонка')
+        px = proj.evaluate("() => parseFloat(getComputedStyle(document.querySelector('.s-int b')).fontSize)")
+        check(px >= 22, f'проектор: заголовок звонка {px}px (нужно ≥ 22 на 1080p)')
+        shot(proj, 'screen-call')
+        contrast(proj, 'проектор/звонок')
+        small = new_page(1280, 720)
+        small.goto(BASE + '/#screen')
+        small.wait_for_selector('.s-int.call')
+        small.wait_for_timeout(1300)
+        bottom = small.evaluate("() => Math.max(...[...document.querySelectorAll('.s-options li')].map(c => c.getBoundingClientRect().bottom))")
+        check(bottom <= 720, f'проектор 720p: со звонком варианты уходят под сгиб ({bottom:.0f}px)')
+        shot(small, 'screen-720-call')
+        small.close()
+        cp = phones.get('comms')
+        if not cp:
+            cp = new_page(390, 844)
+            cp.context.add_cookies([{'name': 'incw_dev', 'value': 'tok-comms', 'url': BASE}])
+            cp.goto(BASE + '/#play')
+        wait_text(cp, 'Беру звонок')
+        shot(cp, 'phone-call', full=True)
+        phone_checks(cp, 'телефон/звонок')
+        check('Беру звонок' not in phones['scout'].inner_text('body'), 'звонок виден телефону SRE')
+        cp.get_by_role('button', name='Беру звонок').click()
+        wait_text(proj, 'На звонке: Коммуникации')
+        wait_text(gm, 'Отбили, если')
+        shot(gm, 'gm-call', full=True)
+        contrast(gm, 'пульт/звонок')
+        gm.get_by_role('button', name='Отбили (напряжение −3)').click()
+        proj.wait_for_selector('.s-int', state='detached')
+
+        ping = dis['ping']
+        target = phones.get(ping['role'])
+        gm.get_by_role('button', name=ping['label'], exact=True).click()
+        proj.wait_for_selector('.s-int.ping')
+        check(ping['text'] not in proj.inner_text('body'), 'текст лички виден на проекторе')
+        if target:
+            wait_text(target, 'Отвечу после инцидента')
+            shot(target, 'phone-ping', full=True)
+            phone_checks(target, 'телефон/личка')
+            target.get_by_role('button', name='Отвечу после инцидента').click()
+        else:
+            api(gm, '/api/cmd', {'type': 'dismiss', 'role': ping['role']})
+        wait_text(proj, 'отложено')
+        proj.wait_for_timeout(1300)
+        shot(proj, 'screen-ping')
+        contrast(proj, 'проектор/личка')
+        api(gm, '/api/cmd', {'type': 'resolve', 'outcome': 'lost'})
+        api(gm, '/api/cmd', {'type': 'interrupt', 'id': dis['alert']['id']})
+        proj.wait_for_selector('.s-int.alert')
+        proj.wait_for_timeout(1300)
+        shot(proj, 'screen-alert')
+        contrast(proj, 'проектор/алерт')
+        api(gm, '/api/cmd', {'type': 'resolve', 'outcome': 'held'})
+        proj.wait_for_selector('.s-int', state='detached')
+
+        # Отказ инструмента: у адресата пропали данные шага
+        outage = next(d for d in gm_view(gm)['distractions'] if d['kind'] == 'outage')
+        victim = phones.get(outage['role'])
+        api(gm, '/api/cmd', {'type': 'interrupt', 'id': outage['id']})
+        proj.wait_for_selector('.s-int.outage')
+        if victim:
+            wait_text(victim, 'Ваших данных на этом шаге нет')
+            check(victim.locator('pre.data').count() == 0, 'отказ инструмента: данные шага остались на телефоне')
+            shot(victim, 'phone-outage', full=True)
+            phone_checks(victim, 'телефон/отказ инструмента')
+        proj.wait_for_timeout(1300)
+        shot(proj, 'screen-outage')
+        contrast(proj, 'проектор/отказ инструмента')
+        api(gm, '/api/cmd', {'type': 'resolve', 'outcome': 'held'})
+        if victim:
+            victim.wait_for_selector('pre.data')
+
+        # Выбыл Координатор: командование берёт SRE с телефона
+        hand = next(d for d in gm_view(gm)['distractions'] if d['kind'] == 'handover')
+        api(gm, '/api/cmd', {'type': 'interrupt', 'id': hand['id']})
+        wait_text(proj, 'Кто командует?')
+        wait_text(phones['scout'], 'Беру командование')
+        shot(phones['scout'], 'phone-handover', full=True)
+        phone_checks(phones['scout'], 'телефон/выбыл Координатор')
+        phones['scout'].get_by_role('button', name='Беру командование').click()
+        wait_text(proj, 'Командует: SRE')
+        proj.wait_for_timeout(1300)
+        shot(proj, 'screen-handover')
+        contrast(proj, 'проектор/выбыл Координатор')
+        wait_text(gm, 'Командует: SRE')
+        shot(gm, 'gm-handover', full=True)
+        api(gm, '/api/cmd', {'type': 'resolve', 'outcome': 'held'})
+
+        # Новый человек на бридже — только проектор
+        joiner = next(d for d in gm_view(gm)['distractions'] if d['kind'] == 'joiner')
+        api(gm, '/api/cmd', {'type': 'interrupt', 'id': joiner['id']})
+        proj.wait_for_selector('.s-int.joiner')
+        proj.wait_for_timeout(1300)
+        shot(proj, 'screen-joiner')
+        contrast(proj, 'проектор/человек на бридже')
+        api(gm, '/api/cmd', {'type': 'resolve', 'outcome': 'lost'})
+        proj.wait_for_selector('.s-int', state='detached')
+
         # ---------- Заметка ведущего к шагу ----------
         gm.fill('textarea.g-note', 'SRE не прочитал срез — зал хотел рестарт')
         gm.get_by_role('button', name='Сохранить заметку').click()
@@ -324,6 +435,7 @@ def run():
                 api(gm, '/api/cmd', {'type': 'next'})
         proj.wait_for_selector('.recap')
         shot(proj, 'screen-final')
+        check('вбросов отбито' in proj.inner_text('body'), 'итоги на проекторе без строки о вбросах')
         contrast(proj, 'проектор/итоги')
         gm.wait_for_selector('.g-final')
         shot(gm, 'gm-final', full=True)

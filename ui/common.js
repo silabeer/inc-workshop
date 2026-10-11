@@ -122,6 +122,13 @@
     timers.add(el); tick(el);
     return el;
   }
+  // Секундомер «сколько уже идёт» (вброс): считает вверх от at.
+  function elapsed(at) {
+    const el = h('span', { class: 'timer mono', 'aria-label': 'Сколько идёт' });
+    el.dataset.end = at; el.dataset.up = '1';
+    timers.add(el); tick(el);
+    return el;
+  }
   // Таймер, который убрала перерисовка, выбывает; только что созданный (ещё не в DOM) — нет.
   function tick(fresh) {
     const now = Date.now() + offset;
@@ -129,6 +136,7 @@
       if (el.isConnected) el.dataset.seen = '1';
       else if (el !== fresh && el.dataset.seen) { timers.delete(el); continue; }
       const left = (+el.dataset.end - now) / 1000;
+      if (el.dataset.up) { el.textContent = mmss(Math.max(0, -left)); continue; }
       el.textContent = left >= 0 ? mmss(Math.ceil(left)) : '+' + mmss(-left);
       el.classList.toggle('over', left < 0);
     }
@@ -265,5 +273,5 @@
     ta.remove();
   }
 
-  window.UI = { ROOM, BASE, api, qr, beep, unlockSound, soundReady, serverNow, $, h, mount, plural, signed, mmss, rub, PHASES, toast, showError, connect, post, timer, diagram, legend, meters, verdictTag, store, toggleTheme, copy };
+  window.UI = { ROOM, BASE, api, qr, beep, unlockSound, soundReady, serverNow, $, h, mount, plural, signed, mmss, rub, PHASES, toast, showError, connect, post, timer, elapsed, diagram, legend, meters, verdictTag, store, toggleTheme, copy };
 })();

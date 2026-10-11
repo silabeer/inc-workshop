@@ -630,3 +630,38 @@ test('голос зала, пришедший перед остановкой, �
   const saved = JSON.parse(fs.readFileSync(path.join(s.dir, 'state.json'), 'utf8'));
   assert.equal(saved.rooms.main.session.audience['zritel-1'], 'A');
 });
+
+test('вбросы по HTTP: ведущий запускает и закрывает, телефон берёт трубку только своей ролью', async (t) => {
+  const s = await start(t);
+  await s.post('/api/claim', { role: 'comms', token: 'tok-comms' });
+  await s.post('/api/claim', { role: 'scout', token: 'tok-scout' });
+  await cmd(s, { type: 'start' });
+  assert.equal((await cmd(s, { type: 'interrupt', id: 'cto' })).status, 200);
+  assert.equal((await firstEvent(s.port, 'view=screen')).view.interrupt.title, 'Звонок CTO');
+  assert.equal((await s.post('/api/interrupt', { role: 'comms', token: 'tok-scout', action: 'take' })).status, 403);
+  assert.equal((await s.post('/api/interrupt', { role: 'comms', token: 'tok-comms', action: 'ring' })).status, 400);
+  const bad = await s.post('/api/interrupt', { role: 'scout', token: 'tok-scout', action: 'take' });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /Координатор или Коммуникации/);
+  assert.equal((await s.post('/api/interrupt', { role: 'comms', token: 'tok-comms', action: 'take' })).status, 200);
+  assert.equal((await firstEvent(s.port, 'view=screen')).view.interrupt.takenByName, 'Коммуникации');
+  assert.equal((await cmd(s, { type: 'resolve', outcome: 'held' })).status, 200);
+  const gm = (await firstEvent(s.port, 'view=gm')).view;
+  assert.equal(gm.interrupt, null);
+  assert.equal(gm.interrupts[0].takenBy, 'comms');
+});
+
+test('вбросы: партия, сохранённая до вбросов, восстанавливается и запускает вброс', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'incw-srv-'));
+  const E = require('../workshop-engine.js');
+  let session = E.apply(MINI, E.createSession(MINI), { type: 'start' }, 1000);
+  delete session.interrupt; delete session.interrupts;
+  for (const h of session.history) { delete h.interrupt; delete h.interrupts; }
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ version: 3, rooms: { main: { scenarioId: 'mini', session } } }));
+  const s = await start(t, { dir });
+  assert.equal((await firstEvent(s.port, 'view=screen')).view.interrupt, null);
+  assert.equal((await cmd(s, { type: 'interrupt', id: 'bk' })).status, 200);
+  assert.equal((await cmd(s, { type: 'undo' })).status, 200);
+  assert.equal((await cmd(s, { type: 'undo' })).status, 200);
+  assert.equal((await firstEvent(s.port, 'view=gm')).view.phase, 'lobby');
+});

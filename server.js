@@ -10,7 +10,7 @@ const { aggregate } = require('./analytics.js');
 const ROOT = __dirname;
 const HEARTBEAT_MS = 25000; // прокси и мобильные сети рвут молчащий SSE через 30–60 с
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2' };
-const GM_CMDS = ['team', 'start', 'discussion', 'voting', 'revote', 'vote', 'reveal', 'next', 'finish', 'undo', 'release', 'reset', 'shuffle', 'sound', 'joinCode', 'note'];
+const GM_CMDS = ['team', 'start', 'discussion', 'voting', 'revote', 'vote', 'reveal', 'next', 'finish', 'undo', 'release', 'reset', 'shuffle', 'sound', 'joinCode', 'note', 'interrupt', 'takeCall', 'takeCommand', 'dismiss', 'resolve'];
 const ROOM_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const MAX_ROOMS = 20;
 const CODE_RE = /^[A-Za-z0-9]{4,12}$/;
@@ -118,7 +118,7 @@ function makeServer(opts = {}) {
         && Array.isArray(ss.journal || []) && (ss.journal || []).every(j => pack.steps.some(st => st.id === j.stepId && st.options.some(o => o.id === j.optionId)));
     } catch (e) { ok = false; }
     if (!ok) { console.error(`Комната ${id}: сохранённая партия не сходится с паком ${pack.meta.id} — начата новая`); addRoom(id, pack, E.createSession(pack, { team: typeof ss.team === 'string' ? ss.team : undefined, seats: obj(ss.seats) ? ss.seats : undefined }), s.joinCode); continue; }
-    addRoom(id, pack, Object.assign({ audience: {} }, s.session), s.joinCode);
+    addRoom(id, pack, Object.assign({ audience: {}, interrupt: null, interrupts: [] }, s.session), s.joinCode); // поля новее сохранённой партии
   }
   if (!rooms.has('main')) addRoom('main', packs[0]);
 
@@ -342,7 +342,7 @@ function makeServer(opts = {}) {
     if (snap !== null && JSON.stringify(r.session) + r.joinCode === snap) return json(res, 200, { ok: true, role: cmd.role });
     // Журнал для разбора спорных моментов: каждая команда — одна строка в stdout.
     if (cmd.type === 'audienceVote') broadcastSoon(r);
-    else { log(r.id, who, cmd.type, cmd.role || '', cmd.option || '', before !== r.session.phase ? before + ' → ' + r.session.phase : ''); broadcast(r); }
+    else { log(r.id, who, cmd.type, cmd.role || '', cmd.option || cmd.id || cmd.outcome || '', before !== r.session.phase ? before + ' → ' + r.session.phase : ''); broadcast(r); }
     json(res, 200, { ok: true, role: cmd.role });
   }
   function serveFile(res, file) {
@@ -451,7 +451,7 @@ function makeServer(opts = {}) {
       return;
     }
 
-    if (req.method === 'POST' && ['/api/claim', '/api/vote', '/api/audience', '/api/cmd', '/api/rooms'].includes(p)) {
+    if (req.method === 'POST' && ['/api/claim', '/api/vote', '/api/interrupt', '/api/audience', '/api/cmd', '/api/rooms'].includes(p)) {
       // Защита от подделки запросов с чужих сайтов: POST принимается только со своего origin.
       const origin = req.headers.origin;
       if (origin && origin !== 'null') { let host = ''; try { host = new URL(origin).host; } catch (e) { /* битый Origin */ } if (host !== req.headers.host) return json(res, 403, { error: 'Чужой источник запроса' }); }
@@ -480,6 +480,13 @@ function makeServer(opts = {}) {
         if (p === '/api/vote') {
           if (!body.token || r.session.seats[body.role] !== body.token) return json(res, 403, { error: 'Роль занята другим устройством' });
           return exec(res, r, { type: 'vote', role: body.role, option: body.option }, body.role);
+        }
+        // Вброс с телефона: взять трубку звонка, взять командование или отбить личку — от имени своей роли.
+        if (p === '/api/interrupt') {
+          if (!body.token || r.session.seats[body.role] !== body.token) return json(res, 403, { error: 'Роль занята другим устройством' });
+          const type = { take: 'takeCall', command: 'takeCommand', dismiss: 'dismiss' }[body.action];
+          if (!type) return json(res, 400, { error: 'action: take | command | dismiss' });
+          return exec(res, r, { type, role: body.role }, body.role);
         }
         if (p === '/api/audience') {
           if (!codeGuard(req, res, r, body.code)) return;

@@ -49,6 +49,13 @@
     busy = false;
   }
 
+  async function interruptAct(action) {
+    if (busy || !role) return;
+    busy = true;
+    await post('/api/interrupt', { role, action });
+    busy = false;
+  }
+
   function becomeSpectator(on) {
     spectator = on;
     if (on) store.set(key('spectator'), '1'); else store.del(key('spectator'));
@@ -103,19 +110,46 @@
       h('p', { style: 'margin-top:.5rem' }, v.revealed.revealText));
   }
 
+  // Вброс для этой роли: звонок (Координатор, Коммуникации) или личка адресату.
+  function interruptCard(v) {
+    const i = v.interrupt;
+    if (!i) return null;
+    if (i.kind === 'call') return h('div', { class: 'p-int call', role: 'alert' },
+      h('b', null, i.title), h('p', null, i.text),
+      i.takenBy ? h('p', { class: 'p-int-st' }, 'Трубку взяли: ' + i.takenByName, ' · ', UI.elapsed(i.at))
+        : h('button', { class: 'btn', onclick: () => interruptAct('take') }, 'Беру звонок'));
+    if (i.kind === 'outage') return h('div', { class: 'p-int warn', role: 'alert' },
+      h('b', null, i.title), h('p', null, i.text),
+      h('p', { class: 'p-int-st' }, 'Ваших данных на этом шаге нет. Узнайте цифры у команды голосом.'));
+    if (i.kind === 'handover') {
+      if (i.out) return h('div', { class: 'p-int warn', role: 'alert' }, h('b', null, 'Вы выбыли'), h('p', null, i.text),
+        h('p', { class: 'p-int-st' }, 'Молчите и не голосуйте, пока ведущий не вернёт вас. ' + (i.takenByName ? 'Командует: ' + i.takenByName + '.' : 'Команда выбирает, кто командует.')));
+      return h('div', { class: 'p-int warn', role: 'alert' }, h('b', null, i.title), h('p', null, i.text),
+        i.takenBy ? h('p', { class: 'p-int-st' }, i.takenBy === role ? 'Командуете вы: ведёте бридж и решаете ничью.' : 'Командует: ' + i.takenByName)
+          : h('button', { class: 'btn', onclick: () => interruptAct('command') }, 'Беру командование'));
+    }
+    return h('div', { class: 'p-int', role: 'alert' },
+      h('b', null, 'Вам пишет: ' + i.from), h('p', null, i.text),
+      i.dismissed ? h('p', { class: 'p-int-st' }, 'Отложено до конца инцидента')
+        : h('button', { class: 'btn', onclick: () => interruptAct('dismiss') }, 'Отвечу после инцидента'));
+  }
+
   function stepScreen(v) {
-    const st = v.step, out = [];
+    const st = v.step, out = [interruptCard(v)];
     if (v.phase === 'revealed' && v.revealed) out.push(revealed(v));
     else if (STATUS[v.phase]) {
       const [text, go] = STATUS[v.phase];
-      out.push(h('div', { class: 'p-status' + (go && !v.myVote ? ' go' : '') }, v.myVote ? 'Голос учтён. Ждём остальных: ' + v.votedCount + ' из 5.' : text));
+      out.push(h('div', { class: 'p-status' + (go && !v.myVote ? ' go' : '') }, v.myVote ? 'Голос учтён. Ждём остальных: ' + v.votedCount + ' из 5.'
+        : v.private.hidden && !go ? 'Своих данных нет — слушайте команду и спрашивайте.' : text));
     }
-    out.push(h('div', { class: 'p-sect' }, h('h2', null, st.title),
-      h('pre', { class: 'data' }, v.private.data),
-      h('div', { class: 'deliver' }, h('b', null, 'Донесите команде: '), v.private.deliver)));
+    out.push(v.private.hidden ? h('div', { class: 'p-sect' }, h('h2', null, st.title), h('p', { class: 'p-note' }, 'Данные шага недоступны.'))
+      : h('div', { class: 'p-sect' }, h('h2', null, st.title),
+        h('pre', { class: 'data' }, v.private.data),
+        h('div', { class: 'deliver' }, h('b', null, 'Донесите команде: '), v.private.deliver)));
     if (v.phase !== 'revealed') {
-      out.push(h('div', { class: 'p-sect' }, h('h2', null, st.question), voteButtons(v, v.myVote, v.phase === 'voting' && !v.myVote),
-        v.phase === 'voting' ? null : h('p', { class: 'p-note' }, 'Кнопки станут активны, когда ведущий откроет голосование.')));
+      out.push(h('div', { class: 'p-sect' }, h('h2', null, st.question), voteButtons(v, v.myVote, v.phase === 'voting' && !v.myVote && !v.voteBlocked),
+        v.voteBlocked && !v.myVote ? h('p', { class: 'p-note' }, v.voteBlocked + '.')
+          : v.phase === 'voting' ? null : h('p', { class: 'p-note' }, 'Кнопки станут активны, когда ведущий откроет голосование.')));
     }
     return out;
   }

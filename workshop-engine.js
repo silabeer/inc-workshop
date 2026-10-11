@@ -15,6 +15,13 @@
   const START_TENSION = 50;
   const HISTORY_MAX = 40;
   const AUDIENCE_MAX = 1000; // голосов зала на шаг: защита от накрутки скриптом
+  // Вбросы — помехи, которые ведущий запускает кнопкой: звонок руководства, личка роли, посторонний алерт,
+  // новый человек на бридже, отказ инструмента (роль без своих данных), выбывший Координатор.
+  const KINDS = ['call', 'ping', 'alert', 'joiner', 'outage', 'handover'];
+  const ROLE_KINDS = ['ping', 'outage']; // вброс адресован одной роли
+  // Исход вброса двигает шкалы, но не очки: шкала оценок пака не зависит от числа вбросов.
+  const INTERRUPT_FX = { held: { tension: -3, ttrMin: 0 }, lost: { tension: 5, ttrMin: 2 } };
+  const CALL_TAKERS = ['commander', 'comms'];
 
   const str = v => typeof v === 'string' && v.trim() !== '';
   const num = v => typeof v === 'number' && isFinite(v);
@@ -116,6 +123,20 @@
       }
     }
 
+    const dis = Array.isArray(pack.distractions) ? pack.distractions : [];
+    if (!dis.length) errs.push('distractions: нужен хотя бы один вброс (звонок руководства обязателен)');
+    const disIds = new Set();
+    for (const d of dis) {
+      const at = `вброс ${d.id}`;
+      if (!str(d.id) || disIds.has(d.id)) errs.push('вброс: пустой или повторный id');
+      disIds.add(d.id);
+      if (!KINDS.includes(d.kind)) errs.push(`${at}: kind ${d.kind} не из ${KINDS.join('/')}`);
+      for (const f of ['from', 'text', 'win']) if (!str(d[f])) errs.push(`${at}: пустое поле ${f}`);
+      if (ROLE_KINDS.includes(d.kind) && !ROLE_IDS.includes(d.role)) errs.push(`${at}: role ${d.role} — нужна одна из ${ROLE_IDS.join(', ')}`);
+      if (d.kind === 'outage' && d.role === 'commander') errs.push(`${at}: у Координатора нет данных систем — отказ инструмента ему не адресуют`);
+    }
+    if (dis.length && dis.filter(d => d.kind === 'call').length !== 1) errs.push('distractions: нужен ровно один звонок руководства (kind: call)');
+
     const end = pack.end || {};
     if (!str(end.rootCause)) errs.push('end.rootCause пуст');
     if (!Array.isArray(end.debriefQuestions) || !end.debriefQuestions.length || !end.debriefQuestions.every(str)) errs.push('end.debriefQuestions: нужен непустой список вопросов');
@@ -148,6 +169,8 @@
       seats,
       audience: {},   // голоса зала на текущем шаге: {токен устройства: вариант}; на решение не влияют
       notes: {},      // заметки ведущего по шагам: {stepId: текст} — для разбора и правки кейса после прогона
+      interrupt: null,  // активный вброс: { id, stepId, at, takenBy, dismissed }
+      interrupts: [],   // закрытые вбросы: { id, kind, stepId, sec, takenBy, outcome }
       sound: !!opts.sound,
       phaseAt: null, stepAt: null, startedAt: null, endedAt: null,
       history: [],
@@ -166,6 +189,27 @@
   }
   const clone = s => JSON.parse(JSON.stringify(s));
   const currentStep = (pack, state) => pack.steps[state.stepIndex];
+  // Партии и снимки истории до вбросов этих полей не знают.
+  const activeOf = (pack, state) => state.interrupt ? pack.distractions.find(d => d.id === state.interrupt.id) || null : null;
+  // Почему роль сейчас не голосует: «Go» теряет только Координатор — на звонке или выбыв.
+  // Коммуникации на звонке — их работа, голос у них остаётся.
+  function voteBlocked(pack, state, role) {
+    const d = activeOf(pack, state);
+    if (role !== 'commander' || !d) return null;
+    if (d.kind === 'call' && state.interrupt.takenBy === 'commander') return 'Вы на звонке — «Go» недоступен';
+    if (d.kind === 'handover') return 'Вы выбыли — командует другая роль';
+    return null;
+  }
+  // Роль без своих данных на шаге: отказ её инструмента или выбывший Координатор.
+  function dataHidden(pack, state, role) {
+    const d = activeOf(pack, state);
+    return !!d && ((d.kind === 'outage' && d.role === role) || (d.kind === 'handover' && role === 'commander'));
+  }
+  // Кто решает ничью: Координатор, а пока он выбыл — роль, взявшая командование (до этого — ведущий).
+  function tieBreaker(pack, state) {
+    const d = activeOf(pack, state);
+    return d && d.kind === 'handover' ? state.interrupt.takenBy : 'commander';
+  }
 
   function tally(pack, state) {
     const step = currentStep(pack, state);
@@ -177,8 +221,15 @@
     const leaders = total ? step.options.map(o => o.id).filter(id => counts[id] === top) : [];
     let winner = null, decidedBy = null;
     if (leaders.length === 1) { winner = leaders[0]; decidedBy = 'votes'; }
-    else if (leaders.length > 1 && leaders.includes(state.votes.commander)) { winner = state.votes.commander; decidedBy = 'commander'; }
-    return { counts, total, leaders, tie: leaders.length > 1, winner, decidedBy, allVoted: total === ROLE_IDS.length };
+    // Кто называет вариант при ничьей без решающего голоса: Координатор, исполняющий обязанности
+    // или никто (Координатор выбыл или на звонке без голоса) — тогда выбирает ведущий.
+    let namer = null;
+    if (leaders.length > 1) {
+      const tb = tieBreaker(pack, state);
+      if (tb && leaders.includes(state.votes[tb])) { winner = state.votes[tb]; decidedBy = tb === 'commander' ? 'commander' : 'acting'; }
+      else if (tb && !state.votes[tb] && !voteBlocked(pack, state, tb)) namer = tb;
+    }
+    return { counts, total, leaders, tie: leaders.length > 1, winner, decidedBy, namer, allVoted: total === ROLE_IDS.length };
   }
 
   // Голоса зала: подсказка для разбора («зал выбрал откат, роли — флаг»), на решение команды не влияют.
@@ -267,6 +318,9 @@
         if (!ROLE_IDS.includes(cmd.role)) fail('Нет такой роли');
         if (!step.options.some(o => o.id === cmd.option)) fail('Нет такого варианта');
         if (s.votes[cmd.role]) fail('Голос уже учтён');
+        // Координатор на звонке «Go» не даёт; голос, поданный до звонка, остаётся.
+        const why = voteBlocked(pack, s, cmd.role);
+        if (why) fail(why);
         s.votes[cmd.role] = cmd.option;
         return s;
       }
@@ -287,7 +341,7 @@
         let optionId = cmd.option, decidedBy = 'gm';
         if (optionId === undefined || optionId === null) {
           if (!t.total) fail('Нет голосов — выберите вариант вручную');
-          if (!t.winner) fail('Ничья — Координатор называет вариант, выберите его');
+          if (!t.winner) fail(t.namer ? `Ничья — ${pack.roles[t.namer].name}${t.namer === 'commander' ? '' : ' (командует)'} называет вариант, выберите его` : 'Ничья — решающего голоса нет, выберите вариант сами');
           optionId = t.winner; decidedBy = t.decidedBy;
         }
         const o = step.options.find(x => x.id === optionId);
@@ -308,14 +362,61 @@
         Object.assign(s, { phase: 'revealed', revealed: optionId, phaseAt: now });
         return withHistory(state, s);
       }
+      case 'interrupt': {
+        if (!['situation', 'discussion', 'voting', 'revealed'].includes(s.phase)) fail('Вброс — только во время шага');
+        if (s.interrupt) fail('Сначала закройте текущий вброс');
+        const d = (pack.distractions || []).find(x => x.id === cmd.id);
+        if (!d) fail('Нет такого вброса');
+        if ((s.interrupts || []).some(x => x.id === d.id)) fail('Этот вброс уже был');
+        s.interrupt = { id: d.id, stepId: step.id, at: now, takenBy: null, dismissed: false };
+        return withHistory(state, s);
+      }
+      case 'takeCall': {
+        const d = activeOf(pack, s);
+        if (!d || d.kind !== 'call') fail('Сейчас никто не звонит');
+        if (!CALL_TAKERS.includes(cmd.role)) fail('Звонок берут Координатор или Коммуникации');
+        if (s.interrupt.takenBy) fail('Трубку уже взяли');
+        s.interrupt.takenBy = cmd.role;
+        return s;
+      }
+      case 'takeCommand': {
+        const d = activeOf(pack, s);
+        if (!d || d.kind !== 'handover') fail('Координатор на месте');
+        if (!ROLE_IDS.includes(cmd.role) || cmd.role === 'commander') fail('Командование берёт одна из остальных ролей');
+        if (s.interrupt.takenBy) fail('Командование уже взяли');
+        s.interrupt.takenBy = cmd.role;
+        return s;
+      }
+      case 'dismiss': {
+        const d = activeOf(pack, s);
+        if (!d || d.kind !== 'ping' || d.role !== cmd.role) fail('Вам сейчас никто не пишет');
+        s.interrupt.dismissed = true;
+        return s;
+      }
+      case 'resolve': {
+        const d = activeOf(pack, s);
+        if (!d) fail('Вброса нет');
+        const fx = INTERRUPT_FX[cmd.outcome];
+        if (!fx) fail('Исход вброса: held | lost');
+        s.metrics = Object.assign({}, s.metrics, {
+          tension: clamp(s.metrics.tension + fx.tension, 0, 100),
+          ttrMin: Math.max(0, s.metrics.ttrMin + fx.ttrMin),
+        });
+        s.interrupts = (s.interrupts || []).concat([{ id: d.id, kind: d.kind, stepId: s.interrupt.stepId,
+          sec: Math.max(0, Math.round((now - s.interrupt.at) / 1000)), takenBy: s.interrupt.takenBy, outcome: cmd.outcome }]);
+        s.interrupt = null;
+        return withHistory(state, s);
+      }
       case 'next': {
         if (s.phase !== 'revealed') fail('Дальше — после раскрытия');
+        if (s.interrupt) fail('Сначала закройте вброс');
         if (s.stepIndex + 1 >= pack.steps.length) Object.assign(s, { phase: 'end', endedAt: now, phaseAt: now });
         else Object.assign(s, { phase: 'situation', stepIndex: s.stepIndex + 1, votes: {}, audience: {}, revealed: null, stepAt: now, phaseAt: now });
         return withHistory(state, s);
       }
       case 'finish': {
         if (s.phase === 'lobby' || s.phase === 'end') fail('Игра не идёт');
+        if (s.interrupt) fail('Сначала закройте вброс');
         Object.assign(s, { phase: 'end', endedAt: now, phaseAt: now });
         return withHistory(state, s);
       }
@@ -323,7 +424,7 @@
         if (!s.history.length) fail('Откатывать нечего');
         const prev = s.history[s.history.length - 1];
         // Голоса зала текущего шага переживают откат внутри шага (например, отмену раскрытия).
-        return Object.assign(clone(prev), { seats: s.seats, sound: s.sound, audience: prev.stepIndex === s.stepIndex ? s.audience || {} : {}, notes: s.notes || {}, history: s.history.slice(0, -1) });
+        return Object.assign({ interrupt: null, interrupts: [] }, clone(prev), { seats: s.seats, sound: s.sound, audience: prev.stepIndex === s.stepIndex ? s.audience || {} : {}, notes: s.notes || {}, history: s.history.slice(0, -1) });
       }
       default:
         fail('Неизвестная команда');
@@ -347,8 +448,10 @@
       };
     });
     const max = maxScore(pack);
+    const ints = state.interrupts || [];
     return {
       score: state.score, max, metrics: state.metrics,
+      interrupts: { total: ints.length, held: ints.filter(x => x.outcome === 'held').length },
       best: steps.filter(x => x.isBest).length, traps: steps.filter(x => x.trap).length,
       audienceSplit: steps.filter(x => x.audience && x.audience.leaderLabel && !x.audience.agree).length,
       totalSec: steps.reduce((a, x) => a + x.sec, 0), steps, grade: grade(pack, state.score),
@@ -374,6 +477,15 @@
       + (x.audience && x.audience.leaderLabel && !x.audience.agree ? `. Зал (${x.audience.total}) выбрал бы: ${x.audience.leaderLabel}` : '')));
     lines.push('', '## Дольше всего думали', '');
     s.steps.slice().sort((a, b) => b.sec - a.sec).slice(0, 3).forEach(x => lines.push(`- ${x.title} — ${mmss(x.sec)}`));
+    const ints = state.interrupts || [];
+    if (ints.length) {
+      lines.push('', `## Вбросы: отбили ${s.interrupts.held} из ${s.interrupts.total}`, '');
+      ints.forEach(x => {
+        const d = pack.distractions.find(y => y.id === x.id), st = pack.steps.find(y => y.id === x.stepId);
+        lines.push(`- ${interruptLabel(pack, d)} (${st ? st.title : x.stepId}, ${mmss(x.sec)}): ${x.outcome === 'held' ? 'отбили' : 'сбило'}`
+          + (x.takenBy ? (x.kind === 'handover' ? ', командовал(и): ' : ', трубку взял(и): ') + pack.roles[x.takenBy].name : ''));
+      });
+    }
     const notes = pack.steps.filter(st => state.notes && state.notes[st.id]);
     if (notes.length) {
       lines.push('', '## Заметки ведущего', '');
@@ -382,6 +494,26 @@
     lines.push('', '## Причина', '', pack.end.rootCause, '', '## Вопросы для разбора', '');
     pack.end.debriefQuestions.forEach(q => lines.push(`- ${q}`));
     return lines.join('\n');
+  }
+
+  // Заголовок вброса для проектора и телефонов: «Звонок CTO», «Личка: SRE» (отправителя зал не видит).
+  function interruptTitle(pack, d) {
+    if (!d) return 'Вброс';
+    if (d.kind === 'call') return 'Звонок ' + d.from;
+    if (d.kind === 'ping') return 'Личка: ' + pack.roles[d.role].name;
+    if (d.kind === 'joiner') return 'Новые люди на бридже';
+    if (d.kind === 'outage') return 'Отказ: ' + d.from;
+    if (d.kind === 'handover') return 'Координатор выбыл';
+    return 'Алерт · ' + d.from;
+  }
+  // Подпись для пульта и отчёта: вбросов одного вида в паке несколько — различаем по отправителю или тексту.
+  function interruptLabel(pack, d) {
+    if (!d) return 'Вброс';
+    if (d.kind === 'ping') return 'Личка ' + pack.roles[d.role].name + ': ' + d.from;
+    if (d.kind === 'outage') return 'Отказ ' + d.from + ' → ' + pack.roles[d.role].name;
+    if (d.kind === 'alert') return 'Алерт: ' + (d.text.length > 42 ? d.text.slice(0, 40) + '…' : d.text);
+    if (d.kind === 'joiner') return 'На бридже: ' + d.from;
+    return interruptTitle(pack, d);
   }
 
   /* ---------- Представления для трёх экранов ----------
@@ -458,6 +590,29 @@
     return data.split('\n').flatMap(line => line.length <= REFLOW_WIDTH ? [line] : reflowLine(line, REFLOW_WIDTH)).join('\n');
   }
 
+  // Проектору — только явный список полей: текст лички остаётся у адресата, критерий исхода — у ведущего.
+  function screenInterrupt(pack, state) {
+    const d = activeOf(pack, state);
+    if (!d) return null;
+    const i = state.interrupt;
+    return { kind: d.kind, title: interruptTitle(pack, d), from: d.kind === 'ping' ? null : d.from, text: d.kind === 'ping' ? null : d.text,
+      roleName: d.role ? pack.roles[d.role].name : null,
+      at: i.at, takenByName: i.takenBy ? pack.roles[i.takenBy].name : null, dismissed: !!i.dismissed };
+  }
+  // Телефону — только участникам: звонок видят Координатор и Коммуникации, личку — адресат.
+  function playInterrupt(pack, state, role) {
+    const d = activeOf(pack, state);
+    if (!d) return null;
+    const i = state.interrupt;
+    if (d.kind === 'call' && CALL_TAKERS.includes(role)) return { kind: 'call', title: interruptTitle(pack, d), from: d.from, text: d.text, at: i.at, takenBy: i.takenBy, takenByName: i.takenBy ? pack.roles[i.takenBy].name : null };
+    if (d.kind === 'ping' && d.role === role) return { kind: 'ping', title: interruptTitle(pack, d), from: d.from, text: d.text, at: i.at, dismissed: !!i.dismissed };
+    if (d.kind === 'outage' && d.role === role) return { kind: 'outage', title: interruptTitle(pack, d), from: d.from, text: d.text, at: i.at };
+    // Выбывший Координатор видит, что он вне игры; остальные — кнопку «Беру командование».
+    if (d.kind === 'handover') return { kind: 'handover', title: interruptTitle(pack, d), text: d.text, at: i.at, out: role === 'commander',
+      takenBy: i.takenBy, takenByName: i.takenBy ? pack.roles[i.takenBy].name : null };
+    return null;
+  }
+
   function view(pack, state, audience, opts) {
     opts = opts || {};
     const now = opts.now || 0;
@@ -468,6 +623,7 @@
         view: 'screen', diagram: pack.diagram, score: state.score, maxScore: maxScore(pack), metrics: state.metrics,
         moneyLimit: pack.meta.moneyLimit, focus: step ? step.focus || [] : [], diagramState: step ? step.state || {} : {},
         sound: !!state.sound,
+        interrupt: screenInterrupt(pack, state),
         summary: state.phase === 'end' ? publicSummary(pack, state) : null,
       });
     }
@@ -478,7 +634,10 @@
       return Object.assign(v, {
         view: 'play',
         role: role && { id: role, name: r.name, mission: r.mission, welcomePrivate: r.welcomePrivate },
-        private: role && step ? Object.assign({}, step.private[role], { data: reflowData(step.private[role].data) }) : null,
+        // Отказ инструмента: данных шага у роли нет — только то, что скажут другие.
+        private: role && step ? (dataHidden(pack, state, role) ? { hidden: true } : Object.assign({}, step.private[role], { data: reflowData(step.private[role].data) })) : null,
+        interrupt: role ? playInterrupt(pack, state, role) : null,
+        voteBlocked: role ? voteBlocked(pack, state, role) : null,
         myVote: role ? state.votes[role] || null : null,
         // Зритель без роли тоже голосует — как подсказка для разбора.
         audienceVote: !role && opts.token ? (state.audience || {})[opts.token] || null : null,
@@ -497,6 +656,9 @@
         focus: step ? step.focus || [] : [], diagramState: step ? step.state || {} : {},
         votes: state.votes, tally: step ? tally(pack, state) : null, audience: step ? tallyAudience(pack, state) : null,
         sound: !!state.sound,
+        distractions: (pack.distractions || []).map(d => Object.assign({}, d, { title: interruptTitle(pack, d), label: interruptLabel(pack, d), used: (state.interrupts || []).some(x => x.id === d.id) })),
+        interrupt: state.interrupt ? Object.assign({}, state.interrupt, { title: interruptLabel(pack, activeOf(pack, state)), kind: activeOf(pack, state).kind }) : null,
+        interrupts: state.interrupts || [],
         score: state.score, maxScore: maxScore(pack), metrics: state.metrics, moneyLimit: pack.meta.moneyLimit,
         canUndo: state.history.length > 0, journal: state.journal, notes: state.notes || {},
         stepTitles: pack.steps.map(x => ({ id: x.id, title: x.title })),
@@ -509,7 +671,7 @@
   }
 
   return {
-    ROLE_IDS, PHASE_SEC, START_TENSION,
+    ROLE_IDS, PHASE_SEC, START_TENSION, KINDS, INTERRUPT_FX,
     validate, maxScore, minScore, bestOption, verdict, grade,
     createSession, apply, tally, tallyAudience, summary, report, view, reflowData,
   };

@@ -7,6 +7,7 @@
   let lastReveal = null;
   let last = null;
   let beeped = null; // phaseAt фазы, по которой уже прозвучал сигнал
+  let flashed = null; // at вброса, плашка которого уже мигнула
 
   function bar(v) {
     const right = h('div', { class: 'right' },
@@ -49,6 +50,24 @@
   const local = /^(localhost|127\.|\[?::1\]?$)/.test(location.hostname);
   function joinUrl() { return (!local && !publicUrl) ? location.origin + UI.BASE + '#play' : playUrls[0] || location.origin + UI.BASE + '#play'; }
 
+  // Вброс: звонок — красная плашка во всю ширину, личка и алерт — спокойнее. Текст лички сюда не приходит.
+  function interruptBar(v) {
+    const i = v.interrupt;
+    if (!i || v.phase === 'lobby' || v.phase === 'end') return null;
+    let text = i.text, status = null;
+    if (i.kind === 'call') status = i.takenByName ? 'На звонке: ' + i.takenByName : 'Никто не взял трубку';
+    if (i.kind === 'joiner') text = i.from[0].toUpperCase() + i.from.slice(1) + ' — ' + i.text; // кто пришёл: от этого зависит, какую сводку ему дать
+    if (i.kind === 'ping') { text = 'роль отвлекают в личных сообщениях'; status = i.dismissed ? 'отложено' : null; }
+    if (i.kind === 'outage') status = i.roleName + ' без своих данных';
+    if (i.kind === 'handover') status = i.takenByName ? 'Командует: ' + i.takenByName : 'Кто командует?';
+    const what = [h('b', null, i.title), h('span', { class: 's-int-text' + (i.kind === 'alert' ? ' mono' : '') }, text)];
+    // Мигает один раз при появлении, а не на каждой перерисовке (голос, таймер).
+    const fresh = flashed !== i.at;
+    flashed = i.at;
+    return h('div', { class: 's-int ' + i.kind + (fresh ? ' fresh' : ''), role: 'alert' }, h('div', { class: 's-int-what' }, what),
+      h('div', { class: 's-int-status' }, status, UI.elapsed(i.at)));
+  }
+
   function aside(v) {
     return h('div', { class: 's-aside' },
       h('div', { class: 'panel s-metrics' }, meters(v, v.revealed && prevMetrics(v))),
@@ -75,7 +94,8 @@
 
   function revealView(v) {
     const r = v.revealed, idx = v.step.options.findIndex(o => o.id === r.optionId);
-    const how = r.decidedBy === 'commander' ? ' — решил Координатор при ничьей' : r.decidedBy === 'gm' ? ' — выбор ведущего' : '';
+    const how = r.decidedBy === 'commander' ? ' — решил Координатор при ничьей' : r.decidedBy === 'acting' ? ' — при ничьей решил исполняющий обязанности Координатора'
+      : r.decidedBy === 'gm' ? ' — выбор ведущего' : '';
     const left = h('div', null,
       h('h2', { class: 's-title' }, v.step.title),
       h('p', { class: 's-picked' }, 'Команда выбрала: ', h('b', null, (idx + 1) + '. ' + r.label), how),
@@ -112,6 +132,7 @@
         h('div', { class: 'metrics' },
           [[s.score + ' / ' + s.max, 'очки'], [s.best + ' / ' + s.steps.length, 'лучших решений'], [rub(s.metrics.money), 'потери'],
             [s.metrics.ttrMin + ' мин', 'восстановление'], [mmss(s.totalSec), 'время игры']]
+            .concat(s.interrupts && s.interrupts.total ? [[s.interrupts.held + ' / ' + s.interrupts.total, 'вбросов отбито']] : [])
             .map(([b, t]) => h('div', { class: 'metric' }, h('b', null, b), h('span', null, t))))),
       h('div', { class: 's-grid' },
         h('div', null, h('h2', { style: 'font-size:1.4rem;margin-bottom:.3rem' }, 'Что выбрали и что было лучшим'),
@@ -152,7 +173,7 @@
     if (!last || last.phaseAt !== v.phaseAt || (!last.sound && v.sound)) beeped = v.phaseSec && UI.serverNow() >= v.phaseAt + v.phaseSec * 1000 ? v.phaseAt : null;
     last = v;
     const body = v.phase === 'lobby' ? lobby(v) : v.phase === 'end' ? finalView(v) : v.phase === 'revealed' ? revealView(v) : stepView(v);
-    mount('screenBody', bar(v), soundHint(v), body);
+    mount('screenBody', bar(v), soundHint(v), interruptBar(v), body);
     animateMeters(v);
   }
 
